@@ -1,23 +1,22 @@
 package dnsgate
 
 import (
-	"github.com/miekg/dns"
-	"fmt"
 	"encoding/json"
+	"fmt"
+	"github.com/miekg/dns"
 )
 
-
 const (
-	ErrDnsConnectioTimeout         = "dns_connection_timeout"
-	ErrDnsWriteTimeout         = "dns_write_timeout"
-	ErrDnsReadTimeout         = "dns_read_timeout"
-	ErrDnsInternalError= "dns_internal_error"
+	ErrDnsConnectionTimeout = "dns_connection_timeout"
+	ErrDnsWriteTimeout      = "dns_write_timeout"
+	ErrDnsReadTimeout       = "dns_read_timeout"
+	ErrDnsInternalError     = "dns_internal_error"
 )
 
 type DnsError struct {
-	Code        string
-	Msg         string
-	MsgId       string
+	Code  string
+	Msg   string
+	MsgId string
 }
 
 func (e *DnsError) Error() string {
@@ -26,9 +25,9 @@ func (e *DnsError) Error() string {
 
 func (e *DnsError) Json() []byte {
 	j, _ := json.Marshal(map[string]string{
-		"code":        e.Code,
-		"msg":         e.Msg,
-		"msg_id":      e.Msg,
+		"code":   e.Code,
+		"msg":    e.Msg,
+		"msg_id": e.Msg,
 	})
 	return j
 }
@@ -41,4 +40,3 @@ type DnsGate interface {
 	AddSRV(srv *dns.RR) error
 	Query(typ, key string) ([]dns.RR, error)
 }
-
