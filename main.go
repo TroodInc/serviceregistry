@@ -3,8 +3,8 @@ package main
 import (
 	"crypto/rsa"
 	"fmt"
+	"git.reaxoft.loc/infomir/director/dnsgate"
 	"git.reaxoft.loc/infomir/director/logger"
-	"git.reaxoft.loc/infomir/director/server"
 	"github.com/miekg/dns"
 	"log"
 	"os"
@@ -104,7 +104,7 @@ func main() {
 	}
 	logger.Debug("Got an valid answer: %v\n", resp)
 
-	var srv = server.New("", "8080", "/director")
+	var srv = dnsgate.New("", "8080", "/director")
 
 	var opts = map[string]OptsDesc{
 		"-a": {1, func(p []string) error {
