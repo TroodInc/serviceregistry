@@ -4,6 +4,6 @@ import (
 	"github.com/miekg/dns"
 )
 
-type udpDnsGate struct {
+type udpGate struct {
 	*dns.Client
 }
