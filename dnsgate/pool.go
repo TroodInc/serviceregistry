@@ -42,3 +42,7 @@ type DnsGate interface {
 	Query(typ, key string) ([]dns.RR, error)
 }
 
+type pooledUdpDnsGate struct {
+	pool map[*udpGate]bool 
+}
+
