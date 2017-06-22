@@ -4,17 +4,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/miekg/dns"
-	"sync"
-	"strings"
 	"os"
+	"strings"
+	"sync"
 )
 
 const (
+	ErrDnsConnectionError   = "dns_connection_error"
 	ErrDnsConnectionTimeout = "dns_connection_timeout"
 	ErrDnsWriteTimeout      = "dns_write_timeout"
 	ErrDnsReadTimeout       = "dns_read_timeout"
 	ErrDnsInternalError     = "dns_internal_error"
-	ErrDnsWrongKeyPath = "dns_wrong_key_path"
+	ErrDnsWrongKeyPath      = "dns_wrong_key_path"
 )
 
 type DnsError struct {
@@ -49,17 +50,17 @@ const poolLen uint32 = 16
 
 const (
 	ConnectionTimeoutSec uint32 = 30
-	WriteTimeoutSec uint32 = 30
-	ReadTimeoutSec uint32 = 30
+	WriteTimeoutSec      uint32 = 30
+	ReadTimeoutSec       uint32 = 30
 )
 
 type pooledUdpDnsGate struct {
-	pool map[*udpGate]bool 
+	pool      map[*udpGate]bool
 	poolGuard sync.RWMutex
 
 	domain string
-	port uint16
-	key *dns.KEY
+	port   uint16
+	key    *dns.KEY
 }
 
 func newPooledUdpDnsGate(d string, p uint16, privkeyPath string) (DnsGate, error) {
@@ -81,8 +82,8 @@ func readDnsKey(privkeyPath string) (*dns.KEY, error) {
 		dir = ""
 		privkeyFile = privkeyPath
 	} else {
-		dir = privkeyPath[:idx + 1]
-		privkeyFile = privkeyPath[idx + 1:]
+		dir = privkeyPath[:idx+1]
+		privkeyFile = privkeyPath[idx+1:]
 	}
 	pubkeyFile := strings.TrimSuffix(privkeyFile, "private") + "key"
 
