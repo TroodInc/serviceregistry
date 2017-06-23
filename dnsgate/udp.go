@@ -10,26 +10,32 @@ import (
 type udpGate struct {
 	conn    *dns.Conn
 	timeout time.Duration
+	err     error
 }
 
-//
 func NewUdpGate(address string, timeout time.Duration) (*udpGate, error) {
-	co, err := dns.DialTimeout("udp", address, timeout)
-	if err, ok := err.(net.Error); ok {
-		logger.Error(err.Error())
-		var code string
-		if err.Timeout() {
-			code = ErrDnsConnectionTimeout
+	attempt := 1
+	for {
+		if co, err := dns.DialTimeout("udp", address, timeout); err == nil {
+			return &udpGate{conn: co, timeout: timeout}, nil
 		} else {
-			code = ErrDnsConnectionError
+			logger.Error("Attempt #%d to connect to '%s' DNS server failed: %s", attempt, address, err.Error())
+			if err, ok := err.(net.Error); ok {
+				switch {
+				case err.Timeout():
+					return nil, NewDnsError("", ErrDnsConnectionTimeout, err.Error())
+				case err.Temporary() && attempt < 3:
+					logger.Info("Detect temporary error. Try again.")
+					time.Sleep(10 * time.Millisecond)
+					attempt = attempt + 1
+				default:
+					return nil, NewDnsError("", ErrDnsConnectionError, err.Error())
+				}
+			} else {
+				return nil, NewDnsError("", ErrDnsInternalError, err.Error())
+			}
 		}
-		return nil, NewDnsError("", code, err.Error())
-	} else if err != nil {
-		logger.Error(err.Error())
-		return nil, NewDnsError("", ErrDnsInternalError, err.Error())
 	}
-
-	return &udpGate{co, timeout}, nil
 }
 
 func (ug *udpGate) deadline() time.Time {
@@ -71,27 +77,28 @@ func (ug *udpGate) read() ([]byte, error) {
 }
 
 func (ug *udpGate) Release() error {
-	return ug.conn.Close()
+	ug.err = ug.conn.Close()
+	return ug.err
 }
 
 func (ug *udpGate) SendMessageSync(msg []byte) ([]byte, error) {
-	if err := ug.setWriteDeadline(); err != nil {
-		logger.Error(err.Error())
-		return nil, err
+	if ug.err = ug.setWriteDeadline(); ug.err != nil {
+		logger.Error(ug.err.Error())
+		return nil, ug.err
 	}
-	if _, err := ug.write(msg); err != nil {
-		logger.Error(err.Error())
-		return nil, err
+	if _, ug.err = ug.write(msg); ug.err != nil {
+		logger.Error(ug.err.Error())
+		return nil, ug.err
 	}
 
-	if err := ug.setReadDeadline(); err != nil {
-		logger.Error(err.Error())
-		return nil, err
+	if ug.err = ug.setReadDeadline(); ug.err != nil {
+		logger.Error(ug.err.Error())
+		return nil, ug.err
 	}
-	r, err := ug.read()
-	if err != nil {
-		logger.Error(err.Error())
-		return nil, err
+	var r []byte
+	if r, ug.err = ug.read(); ug.err != nil {
+		logger.Error(ug.err.Error())
+		return nil, ug.err
 	}
 
 	return r, nil
