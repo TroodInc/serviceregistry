@@ -199,7 +199,7 @@ func (p *pooledUdpDnsGate) AddSRV(zone string, srv []dns.RR) error {
 	}
 
 	r := new(dns.Msg)
-	if err := m.Unpack(rb); err != nil {
+	if err := r.Unpack(rb); err != nil {
 		return NewDnsError(strconv.FormatUint(uint64(m.Id), 10), ErrDnsBadResponseMessage, "Bad response message: '%s'", err.Error())
 	}
 
@@ -230,7 +230,7 @@ func (p *pooledUdpDnsGate) Query(typ uint16, key string) ([]dns.RR, error) {
 	}
 
 	r := new(dns.Msg)
-	if err := m.Unpack(rb); err != nil {
+	if err := r.Unpack(rb); err != nil {
 		return nil, NewDnsError(strconv.FormatUint(uint64(m.Id), 10), ErrDnsBadResponseMessage, "Bad response message: '%s'", err.Error())
 	}
 
