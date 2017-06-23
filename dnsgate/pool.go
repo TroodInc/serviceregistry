@@ -22,7 +22,9 @@ const (
 	ErrDnsWrongKeyPath      = "dns_wrong_key_path"
 	ErrDnsSigningError      = "dns_signing_error"
 	ErrDnsBadResponseMessage      = "dns_bad_response_message"
+	ErrDnsBadMessage      = "dns_bad_message"
 	ErrDnsUpdateFailed      = "dns_update_failed"
+	ErrDnsQueryFailed      = "dns_query_failed"
 )
 
 type DnsError struct {
@@ -50,7 +52,7 @@ func NewDnsError(msgId string, code string, msg string, a ...interface{}) *DnsEr
 
 type DnsGate interface {
 	AddSRV(zone string, srv []dns.RR) error
-	Query(typ, key string) ([]dns.RR, error)
+	Query(typ uint16, key string) ([]dns.RR, error)
 }
 
 const poolMaxSize uint32 = 16
@@ -193,7 +195,7 @@ func (p *pooledUdpDnsGate) AddSRV(zone string, srv []dns.RR) error {
 
 	rb, e := g.SendMessageSync(mb)
 	if e != nil {
-		return nil
+		return e
 	}
 
 	r := new(dns.Msg)
@@ -207,6 +209,33 @@ func (p *pooledUdpDnsGate) AddSRV(zone string, srv []dns.RR) error {
 	return nil
 }
 
-func (p *pooledUdpDnsGate) Query(typ, key string) ([]dns.RR, error) {
-	return nil, nil
+func (p *pooledUdpDnsGate) Query(typ uint16, key string) ([]dns.RR, error) {
+	m := new(dns.Msg)
+	m.SetQuestion(key, typ)
+
+	g, e := p.acquire()
+	if e != nil {
+		return nil, e
+	}
+	defer p.release(g)
+
+	mb, e := m.Pack()
+	if e != nil {
+		return nil, NewDnsError(strconv.FormatUint(uint64(m.Id), 10), ErrDnsBadMessage, "Bad message: '%s'", e.Error())
+	}
+
+	rb, e := g.SendMessageSync(mb)
+	if e != nil {
+		return nil, e
+	}
+
+	r := new(dns.Msg)
+	if err := m.Unpack(rb); err != nil {
+		return nil, NewDnsError(strconv.FormatUint(uint64(m.Id), 10), ErrDnsBadResponseMessage, "Bad response message: '%s'", err.Error())
+	}
+
+	if r == nil || r.Rcode != dns.RcodeSuccess {
+		return nil, NewDnsError(strconv.FormatUint(uint64(m.Id), 10), ErrDnsUpdateFailed, "DNS update failed: '%v'", r)
+	}
+	return r.Answer, nil
 }
