@@ -51,7 +51,7 @@ func NewDnsError(msgId string, code string, msg string, a ...interface{}) *DnsEr
 }
 
 type DnsGate interface {
-	AddSRV(zone string, srv []dns.RR) error
+	Add(zone string, srv []dns.RR) error
 	Query(typ uint16, key string) ([]dns.RR, error)
 }
 
@@ -73,7 +73,7 @@ type pooledUdpDnsGate struct {
 	privkey crypto.PrivateKey
 }
 
-func newPooledUdpDnsGate(d string, p uint16, privkeyPath string) (DnsGate, error) {
+func NewPooledUdpDnsGate(d string, p uint16, privkeyPath string) (DnsGate, error) {
 	k, pk, e := readDnsKey(privkeyPath)
 	if e != nil {
 		return nil, e
@@ -166,7 +166,7 @@ func (p *pooledUdpDnsGate) release(g *udpGate) {
 	}
 }
 
-func (p *pooledUdpDnsGate) AddSRV(zone string, srv []dns.RR) error {
+func (p *pooledUdpDnsGate) Add(zone string, srv []dns.RR) error {
 	m := new(dns.Msg)
 	m.SetUpdate(zone)
 	m.Insert(srv)

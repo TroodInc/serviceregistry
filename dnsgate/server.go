@@ -29,7 +29,7 @@ func (ds *DirectorServer) SetRoot(r string) {
 }
 
 func (ds *DirectorServer) Run() {
-	dgate, err := newPooledUdpDnsGate("172.25.0.160", 53, "/Users/szaytsev/Kszaytsev.cust.rxt.+008+33265.private")
+	dgate, err := NewPooledUdpDnsGate("172.25.0.160", 53, "/Users/szaytsev/Kszaytsev.cust.rxt.+008+33265.private")
 	if err != nil {
 		logger.Error("Failed to create connection pool: %s", err.Error())
 		panic(err)
