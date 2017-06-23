@@ -92,7 +92,7 @@ func validateSrvType(srvType string) error {
 	parts := strings.Split(srvType, ".")
 	for _, p := range parts {
 		if pos := strings.IndexFunc(p, isNotAllowedCharacter); pos != -1 {
-			return NewDirectorError(ErrDirWrongSrvType, "Service type contains not allowed character '%s'", p[pos:pos +1])
+			return NewDirectorError(ErrDirWrongSrvType, "Service type contains not allowed character '%s'", p[pos:pos + 1])
 		}
 		if p[0] != '_' {
 			return NewDirectorError(ErrDirWrongSrvType, "Service type's parts must start with '_'")
@@ -106,7 +106,7 @@ func validateSrvNameWithoutType(srvName string) error {
 		return NewDirectorError(ErrDirWrongSrvName, "Service name coincides with a service type")
 	}
 	if pos := strings.IndexFunc(srvName, isNotAllowedCharacter); pos != -1 {
-		return NewDirectorError(ErrDirWrongSrvType, "Starting part of a service name contains not allowed character '%s'", srvName[pos:pos +1])
+		return NewDirectorError(ErrDirWrongSrvType, "Starting part of a service name contains not allowed character '%s'", srvName[pos:pos + 1])
 	}
 	if srvName[0] == '_' {
 		return NewDirectorError(ErrDirWrongSrvType, "Service name mut not start with '_'")
