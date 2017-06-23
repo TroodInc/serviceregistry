@@ -6,7 +6,9 @@ import (
 	"github.com/miekg/dns"
 	"os"
 	"strings"
-	"sync"
+	"sync/atomic"
+	"strconv"
+	"time"
 )
 
 const (
@@ -46,17 +48,17 @@ type DnsGate interface {
 	Query(typ, key string) ([]dns.RR, error)
 }
 
-const poolLen uint32 = 16
+const poolMaxSize uint32 = 16
 
 const (
-	ConnectionTimeoutSec uint32 = 30
-	WriteTimeoutSec      uint32 = 30
-	ReadTimeoutSec       uint32 = 30
+	ConnectionTimeoutSec time.Duration = 30 * time.Second
+	WriteTimeoutSec      = 30 * time.Second
+	ReadTimeoutSec       = 30 * time.Second
 )
 
 type pooledUdpDnsGate struct {
-	pool      map[*udpGate]bool
-	poolGuard sync.RWMutex
+	pool     chan *udpGate
+	poolSize uint32
 
 	domain string
 	port   uint16
@@ -68,7 +70,7 @@ func newPooledUdpDnsGate(d string, p uint16, privkeyPath string) (DnsGate, error
 	if e != nil {
 		return nil, e
 	}
-	return &pooledUdpDnsGate{domain: d, port: p, key: k}, nil
+	return &pooledUdpDnsGate{domain: d, port: p, key: k, pool: make(chan *udpGate, poolMaxSize)}, nil
 }
 
 func readDnsKey(privkeyPath string) (*dns.KEY, error) {
@@ -106,6 +108,49 @@ func readDnsKey(privkeyPath string) (*dns.KEY, error) {
 		return nil, NewDnsError("", ErrDnsWrongKeyPath, "Can not parse private key file: '%s'", e.Error())
 	}
 	return key, nil
+}
+
+func (p *pooledUdpDnsGate) acquire() (g *udpGate, err error) {
+	select {
+	case con := <-p.pool:
+		return con, nil
+	default: 
+		if atomic.LoadUint32(&p.poolSize) >= poolMaxSize {
+			con := <-p.pool
+			return con, nil
+		} else {
+			if atomic.AddUint32(&p.poolSize, 1) > poolMaxSize {
+				atomic.AddUint32(&p.poolSize, ^uint32(0))
+				con := <-p.pool
+				return con, nil
+			} else {
+				defer func() {
+					if r := recover(); r != nil {
+						atomic.AddUint32(&p.poolSize, ^uint32(0))
+						err = NewDnsError("", ErrDnsConnectionError, "Error while connection: %v", r)
+						g = nil
+					}
+				}()
+				con, e := NewUdpGate(p.domain + ":" + strconv.FormatUint(uint64(p.port), 10), ConnectionTimeoutSec)
+				if e != nil {
+					atomic.AddUint32(&p.poolSize, ^uint32(0))
+					return nil, e
+				}
+				return con, nil
+			}
+		}
+	}
+	return nil, nil
+}
+
+func (p *pooledUdpDnsGate) release(g *udpGate) {
+	select {
+	case p.pool<- g:
+		return
+	default:
+		atomic.AddUint32(&p.poolSize, ^uint32(0))
+		g.Release()
+	}
 }
 
 func (p *pooledUdpDnsGate) AddSRV(srv []dns.RR) error {
