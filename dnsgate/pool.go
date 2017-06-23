@@ -9,6 +9,8 @@ import (
 	"sync/atomic"
 	"strconv"
 	"time"
+	"crypto"
+	"crypto/rsa"
 )
 
 const (
@@ -18,6 +20,9 @@ const (
 	ErrDnsReadTimeout       = "dns_read_timeout"
 	ErrDnsInternalError     = "dns_internal_error"
 	ErrDnsWrongKeyPath      = "dns_wrong_key_path"
+	ErrDnsSigningError      = "dns_signing_error"
+	ErrDnsBadResponseMessage      = "dns_bad_response_message"
+	ErrDnsUpdateFailed      = "dns_update_failed"
 )
 
 type DnsError struct {
@@ -44,7 +49,7 @@ func NewDnsError(msgId string, code string, msg string, a ...interface{}) *DnsEr
 }
 
 type DnsGate interface {
-	AddSRV(srv []dns.RR) error
+	AddSRV(zone string, srv []dns.RR) error
 	Query(typ, key string) ([]dns.RR, error)
 }
 
@@ -63,19 +68,20 @@ type pooledUdpDnsGate struct {
 	domain string
 	port   uint16
 	key    *dns.KEY
+	privkey crypto.PrivateKey
 }
 
 func newPooledUdpDnsGate(d string, p uint16, privkeyPath string) (DnsGate, error) {
-	k, e := readDnsKey(privkeyPath)
+	k, pk, e := readDnsKey(privkeyPath)
 	if e != nil {
 		return nil, e
 	}
-	return &pooledUdpDnsGate{domain: d, port: p, key: k, pool: make(chan *udpGate, poolMaxSize)}, nil
+	return &pooledUdpDnsGate{domain: d, port: p, key: k, privkey: pk, pool: make(chan *udpGate, poolMaxSize)}, nil
 }
 
-func readDnsKey(privkeyPath string) (*dns.KEY, error) {
+func readDnsKey(privkeyPath string) (*dns.KEY, crypto.PrivateKey, error) {
 	if !strings.HasSuffix(privkeyPath, ".private") {
-		return nil, NewDnsError("", ErrDnsWrongKeyPath, "Path: '%s'", privkeyPath)
+		return nil, nil, NewDnsError("", ErrDnsWrongKeyPath, "Path: '%s'", privkeyPath)
 	}
 
 	var dir string
@@ -91,23 +97,23 @@ func readDnsKey(privkeyPath string) (*dns.KEY, error) {
 
 	pubf, e := os.Open(dir + pubkeyFile)
 	if e != nil {
-		return nil, NewDnsError("", ErrDnsWrongKeyPath, "Can not open public key file: '%s'", e.Error())
+		return nil, nil, NewDnsError("", ErrDnsWrongKeyPath, "Can not open public key file: '%s'", e.Error())
 	}
 	pubkey, e := dns.ReadRR(pubf, pubkeyFile)
 	if e != nil {
-		return nil, NewDnsError("", ErrDnsWrongKeyPath, "Can not parse public key: '%s'", e.Error())
+		return nil, nil, NewDnsError("", ErrDnsWrongKeyPath, "Can not parse public key: '%s'", e.Error())
 	}
 
 	privf, e := os.Open(privkeyPath)
 	if e != nil {
-		return nil, NewDnsError("", ErrDnsWrongKeyPath, "Can not open private key file: '%s'", e.Error())
+		return nil, nil, NewDnsError("", ErrDnsWrongKeyPath, "Can not open private key file: '%s'", e.Error())
 	}
 	key := pubkey.(*dns.KEY)
-	_, e = key.ReadPrivateKey(privf, privkeyFile)
+	privkey, e := key.ReadPrivateKey(privf, privkeyFile)
 	if e != nil {
-		return nil, NewDnsError("", ErrDnsWrongKeyPath, "Can not parse private key file: '%s'", e.Error())
+		return nil, nil, NewDnsError("", ErrDnsWrongKeyPath, "Can not parse private key file: '%s'", e.Error())
 	}
-	return key, nil
+	return key, privkey, nil
 }
 
 func (p *pooledUdpDnsGate) acquire() (g *udpGate, err error) {
@@ -153,7 +159,51 @@ func (p *pooledUdpDnsGate) release(g *udpGate) {
 	}
 }
 
-func (p *pooledUdpDnsGate) AddSRV(srv []dns.RR) error {
+func (p *pooledUdpDnsGate) drop(g *udpGate) {
+	atomic.AddUint32(&p.poolSize, ^uint32(0))
+	g.Release()
+}
+
+func (p *pooledUdpDnsGate) AddSRV(zone string, srv []dns.RR) error {
+	m := new(dns.Msg)
+	m.SetUpdate(zone)
+	m.Insert(srv)
+
+	now := uint32(time.Now().Unix())
+	sig := new(dns.SIG)
+	sig.Hdr.Name = "."
+	sig.Hdr.Rrtype = dns.TypeSIG
+	sig.Hdr.Class = dns.ClassANY
+	sig.Algorithm = p.key.Algorithm
+	sig.SignerName = p.key.Hdr.Name
+	sig.Expiration = now + 300
+	sig.Inception = now - 300
+	sig.KeyTag = p.key.KeyTag()
+
+	mb, e := sig.Sign(p.privkey.(*rsa.PrivateKey), m)
+	if e != nil {
+		return NewDnsError(strconv.FormatUint(uint64(m.Id), 10), ErrDnsSigningError, "Signing error: %s", e.Error())
+	}
+
+	g, e := p.acquire()
+	if e != nil {
+		return e
+	}
+	defer p.release(g)
+
+	rb, e := g.SendMessageSync(mb)
+	if e != nil {
+		return nil
+	}
+
+	r := new(dns.Msg)
+	if err := m.Unpack(rb); err != nil {
+		return NewDnsError(strconv.FormatUint(uint64(m.Id), 10), ErrDnsBadResponseMessage, "Bad response message: '%s'", err.Error())
+	}
+
+	if r != nil && r.Rcode != dns.RcodeSuccess {
+		return NewDnsError(strconv.FormatUint(uint64(m.Id), 10), ErrDnsUpdateFailed, "DNS update failed: '%v'", r)
+	}
 	return nil
 }
 
