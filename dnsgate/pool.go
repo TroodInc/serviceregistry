@@ -150,18 +150,18 @@ func (p *pooledUdpDnsGate) acquire() (g *udpGate, err error) {
 }
 
 func (p *pooledUdpDnsGate) release(g *udpGate) {
-	select {
-	case p.pool<- g:
-		return
-	default:
+	if g.err != nil {
 		atomic.AddUint32(&p.poolSize, ^uint32(0))
 		g.Release()
+	} else {
+		select {
+		case p.pool<- g:
+			return
+		default:
+			atomic.AddUint32(&p.poolSize, ^uint32(0))
+			g.Release()
+		}
 	}
-}
-
-func (p *pooledUdpDnsGate) drop(g *udpGate) {
-	atomic.AddUint32(&p.poolSize, ^uint32(0))
-	g.Release()
 }
 
 func (p *pooledUdpDnsGate) AddSRV(zone string, srv []dns.RR) error {
