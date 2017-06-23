@@ -1,14 +1,14 @@
 package main
 
 import (
-	"crypto/rsa"
+	//	"crypto/rsa"
 	"fmt"
 	"git.reaxoft.loc/infomir/director/dnsgate"
 	"git.reaxoft.loc/infomir/director/logger"
-	"github.com/miekg/dns"
+	//	"github.com/miekg/dns"
 	"log"
 	"os"
-	"time"
+	//	"time"
 )
 
 type OptsError struct {
@@ -31,79 +31,72 @@ func init() {
 }
 
 func main() {
-	pubf, e := os.Open("/Users/szaytsev/Kszaytsev.cust.rxt.+008+33265.key")
-	if e != nil {
-		logger.Error("Can not open public key file: %v", e)
-		os.Exit(127)
-	}
+	/*	pubf, e := os.Open("/Users/szaytsev/Kszaytsev.cust.rxt.+008+33265.key")
+		if e != nil {
+			logger.Error("Can not open public key file: %v", e)
+			os.Exit(127)
+		}
 
-	pubkey, e := dns.ReadRR(pubf, "Kszaytsev.cust.rxt.+008+33265.key")
-	if e != nil {
-		logger.Error("Can not parse public key: %v", e)
-		os.Exit(127)
-	}
+		pubkey, e := dns.ReadRR(pubf, "Kszaytsev.cust.rxt.+008+33265.key")
+		if e != nil {
+			logger.Error("Can not parse public key: %v", e)
+			os.Exit(127)
+		}
 
-	privf, e := os.Open("/Users/szaytsev/Kszaytsev.cust.rxt.+008+33265.private")
-	if e != nil {
-		logger.Error("Can not open private key file: %v", e)
-		os.Exit(127)
-	}
+		privf, e := os.Open("/Users/szaytsev/Kszaytsev.cust.rxt.+008+33265.private")
+		if e != nil {
+			logger.Error("Can not open private key file: %v", e)
+			os.Exit(127)
+		}
 
-	key := pubkey.(*dns.KEY)
-	privkey, e := key.ReadPrivateKey(privf, "Kszaytsev.cust.rxt.+008+33265.private")
-	if e != nil {
-		logger.Error("Can not parse private key file: %v", e)
-		os.Exit(127)
-	}
+		key := pubkey.(*dns.KEY)
+		privkey, e := key.ReadPrivateKey(privf, "Kszaytsev.cust.rxt.+008+33265.private")
+		if e != nil {
+			logger.Error("Can not parse private key file: %v", e)
+			os.Exit(127)
+		}
 
-	m := new(dns.Msg)
-	r, err := dns.NewRR("test.cust.rxt 86400 IN A 172.25.0.43")
-	if err != nil {
-		logger.Error("Failed to create rr: %s", err.Error())
-		os.Exit(127)
-	}
-	m.SetUpdate("cust.rxt.")
-	m.Insert([]dns.RR{r})
+		m := new(dns.Msg)
+		r, err := dns.NewRR("test.cust.rxt 86400 IN A 172.25.0.43")
+		if err != nil {
+			logger.Error("Failed to create rr: %s", err.Error())
+			os.Exit(127)
+		}
+		m.SetUpdate("cust.rxt.")
+		m.Insert([]dns.RR{r})
 
-	now := uint32(time.Now().Unix())
-	sig := new(dns.SIG)
-	sig.Hdr.Name = "."
-	sig.Hdr.Rrtype = dns.TypeSIG
-	sig.Hdr.Class = dns.ClassANY
-	sig.Algorithm = key.Algorithm
-	sig.SignerName = key.Hdr.Name
-	sig.Expiration = now + 300
-	sig.Inception = now - 300
-	sig.KeyTag = key.KeyTag()
+		now := uint32(time.Now().Unix())
+		sig := new(dns.SIG)
+		sig.Hdr.Name = "."
+		sig.Hdr.Rrtype = dns.TypeSIG
+		sig.Hdr.Class = dns.ClassANY
+		sig.Algorithm = key.Algorithm
+		sig.SignerName = key.Hdr.Name
+		sig.Expiration = now + 300
+		sig.Inception = now - 300
+		sig.KeyTag = key.KeyTag()
 
-	/*sig.Hdr = dns.RR_Header{"szaytsev.cust.rxt", dns.TypeRRSIG, dns.ClassINET, 14400, 0}
-	sig.TypeCovered = r.Header().Rrtype
-	sig.Labels = uint8(dns.CountLabel(r.Header().Name))
-	sig.OrigTtl = r.Header().Ttl*/
+		mb, e := sig.Sign(privkey.(*rsa.PrivateKey), m)
+		if e != nil {
+			logger.Error("Failed to sign: %v", e)
+			os.Exit(127)
+		}
 
-	mb, e := sig.Sign(privkey.(*rsa.PrivateKey), m)
-	if e != nil {
-		logger.Error("Failed to sign: %v", e)
-		os.Exit(127)
-	}
+		sm := new(dns.Msg)
+		if err := sm.Unpack(mb); err != nil {
+			logger.Error("Failed to unpack signed message: %v", e)
+			os.Exit(127)
+		}
 
-	sm := new(dns.Msg)
-	if err := sm.Unpack(mb); err != nil {
-		logger.Error("Failed to unpack signed message: %v", e)
-		os.Exit(127)
-	}
-	//	m.SetQuestion("vkarpov.cust.rxt.", dns.TypeA)
-	//logger.Debug("Start: %s", m.String())
+		c := new(dns.Client)
 
-	c := new(dns.Client)
+		resp, _, err := c.Exchange(sm, "172.25.0.160:53")
 
-	resp, _, err := c.Exchange(sm, "172.25.0.160:53")
-
-	if resp != nil && resp.Rcode != dns.RcodeSuccess {
-		logger.Error("Failed to get an valid answer: %v\n", resp)
-	}
-	logger.Debug("Got an valid answer: %v\n", resp)
-
+		if resp != nil && resp.Rcode != dns.RcodeSuccess {
+			logger.Error("Failed to get an valid answer: %v\n", resp)
+		}
+		logger.Debug("Got an valid answer: %v\n", resp)
+	*/
 	var srv = dnsgate.New("", "8080", "/director")
 
 	var opts = map[string]OptsDesc{
