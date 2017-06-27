@@ -223,8 +223,8 @@ func validateSrvName(srvName string) error {
 	return nil
 }
 
-func (d *Director) findSrv(srvName string) ([]*dns.SRV, *dns.TXT, error) {
-	if e := validateSrvName(srvName); e != nil {
+func (d *Director) findSrv(srvName string) ([]*dns.SRV, map[string]string, error) {
+	if e := validateSrvName(strings.TrimSuffix(srvName, d.domain)); e != nil {
 		return nil, nil, e
 	}
 
@@ -251,11 +251,25 @@ func (d *Director) findSrv(srvName string) ([]*dns.SRV, *dns.TXT, error) {
 	if txt == nil {
 		return nil, nil, NewDirectorError(ErrDirWrongSrvNotFound, "TXT record not found for service '%s'", srvName)
 	}
-	return srvs, txt, nil
+
+	params := make(map[string]string, len(txt.Txt))
+	for _, s := range txt.Txt {
+		if s != "" {
+			kv := strings.SplitN(s, "=", 2)
+			if _, ok := params[kv[0]]; !ok {
+				if len(kv) == 2 {
+					params[kv[0]] = kv[1]
+				} else {
+					params[kv[0]] = ""
+				}
+			}
+		}
+	}
+	return srvs, params, nil
 }
 
 func (d *Director) findByType(srvType string) ([]*dns.PTR, error) {
-	if e := validateSrvType(srvType); e != nil {
+	if e := validateSrvType(strings.TrimSuffix(srvType, d.domain)); e != nil {
 		return nil, e
 	}
 
