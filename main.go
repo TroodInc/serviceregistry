@@ -1,14 +1,11 @@
 package main
 
 import (
-	//	"crypto/rsa"
 	"fmt"
-	"git.reaxoft.loc/infomir/director/dnsgate"
+	"git.reaxoft.loc/infomir/director/http"
 	"git.reaxoft.loc/infomir/director/logger"
-	//	"github.com/miekg/dns"
 	"log"
 	"os"
-	//	"time"
 )
 
 type OptsError struct {
@@ -24,82 +21,29 @@ type OptsDesc struct {
 	handler func(p []string) error
 }
 
-func init() {
-	logger.SetOut(os.Stdout)
-	logger.SetLevel("debug")
-	log.Printf("The logger is initialized: level: '%s', output: '%s'.\n", "debug", "stdout")
-}
-
+//Main function runs Director server. The following options are avaliable:
+// -a - address on which to run server. Default value is "127.0.0.1"
+// -p - port on which to run server. Default value is 8080.
+// -r - path root to use. Default value is "/director".
+// -d - base domain of all services. Default value is "changeme".
+// --dns-s - DNS server address. Default value is "changeme".
+// --dns-pk - private key to sign command for DNS (RFC2931).
+//Default value is "./dns.private".
+// --log-file - log file path for a log output. By default the log output is stdout.
+// --log-level - logging level. Possible values: panic, fatal, error, warn, info, debug. By default "info".
+//Run example: ./director -a 172.25.0.144 -d cust.rxt --dns-s 172.25.0.160:53 --dns-pk /Users/szaytsev/Kszaytsev.cust.rxt.+008+33265.private --log-file ./director.log --log-level debug
+//
+//Emaple of DNS configuration: https://0x2c.org/rfc2136-ddns-bind-dnssec-for-home-router-dynamic-dns/
+//Example of the command to generate dns-pk: dnssec-keygen -C -r /dev/urandom -a RSASHA256 -b 2048 -n HOST -T KEY ivanov.cust.rxt
 func main() {
-	/*	pubf, e := os.Open("/Users/szaytsev/Kszaytsev.cust.rxt.+008+33265.key")
-		if e != nil {
-			logger.Error("Can not open public key file: %v", e)
-			os.Exit(127)
+	var srv = http.NewServer("127.0.0.1", "8080", "/director", "changeme", "changeme", "./dns.private")
+	var logfile *os.File
+	defer func() {
+		if logfile != nil {
+			logfile.Close()
 		}
-
-		pubkey, e := dns.ReadRR(pubf, "Kszaytsev.cust.rxt.+008+33265.key")
-		if e != nil {
-			logger.Error("Can not parse public key: %v", e)
-			os.Exit(127)
-		}
-
-		privf, e := os.Open("/Users/szaytsev/Kszaytsev.cust.rxt.+008+33265.private")
-		if e != nil {
-			logger.Error("Can not open private key file: %v", e)
-			os.Exit(127)
-		}
-
-		key := pubkey.(*dns.KEY)
-		privkey, e := key.ReadPrivateKey(privf, "Kszaytsev.cust.rxt.+008+33265.private")
-		if e != nil {
-			logger.Error("Can not parse private key file: %v", e)
-			os.Exit(127)
-		}
-
-		m := new(dns.Msg)
-		r, err := dns.NewRR("test.cust.rxt 86400 IN A 172.25.0.43")
-		if err != nil {
-			logger.Error("Failed to create rr: %s", err.Error())
-			os.Exit(127)
-		}
-		m.SetUpdate("cust.rxt.")
-		m.Insert([]dns.RR{r})
-
-		now := uint32(time.Now().Unix())
-		sig := new(dns.SIG)
-		sig.Hdr.Name = "."
-		sig.Hdr.Rrtype = dns.TypeSIG
-		sig.Hdr.Class = dns.ClassANY
-		sig.Algorithm = key.Algorithm
-		sig.SignerName = key.Hdr.Name
-		sig.Expiration = now + 300
-		sig.Inception = now - 300
-		sig.KeyTag = key.KeyTag()
-
-		mb, e := sig.Sign(privkey.(*rsa.PrivateKey), m)
-		if e != nil {
-			logger.Error("Failed to sign: %v", e)
-			os.Exit(127)
-		}
-
-		sm := new(dns.Msg)
-		if err := sm.Unpack(mb); err != nil {
-			logger.Error("Failed to unpack signed message: %v", e)
-			os.Exit(127)
-		}
-
-		c := new(dns.Client)
-
-		resp, _, err := c.Exchange(sm, "172.25.0.160:53")
-
-		if resp != nil && resp.Rcode != dns.RcodeSuccess {
-			logger.Error("Failed to get an valid answer: %v\n", resp)
-		}
-		logger.Debug("Got an valid answer: %v\n", resp)
-	*/
-	var srv = dnsgate.New("", "8080", "/director")
-
-	var opts = map[string]OptsDesc{
+	}()
+	opts := map[string]OptsDesc{
 		"-a": {1, func(p []string) error {
 			srv.SetAddr(p[0])
 			return nil
@@ -111,6 +55,30 @@ func main() {
 		"-r": {1, func(p []string) error {
 			srv.SetRoot(p[0])
 			return nil
+		}},
+		"-d": {1, func(p []string) error {
+			srv.SetDomain(p[0])
+			return nil
+		}},
+		"--dns-s": {1, func(p []string) error {
+			srv.SetDnsServer(p[0])
+			return nil
+		}},
+		"--dns-pk": {1, func(p []string) error {
+			srv.SetDnsPk(p[0])
+			return nil
+		}},
+		"--log-file": {1, func(p []string) error {
+			var err error
+			if logfile, err = os.OpenFile(p[0], os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644); err != nil {
+				return err
+			}
+			logger.SetOut(logfile)
+			log.Printf("Set log output to '%s'\n", p[0])
+			return nil
+		}},
+		"--log-level": {1, func(p []string) error {
+			return logger.SetLevel(p[0])
 		}},
 	}
 
@@ -128,6 +96,6 @@ func main() {
 		}
 	}
 
-	log.Println("Director server started.")
+	logger.Info("Starting director server...")
 	srv.Run()
 }
