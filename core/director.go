@@ -1,25 +1,26 @@
 package director
 
 import (
-	"git.reaxoft.loc/infomir/director/dnsgate"
-	"strings"
-	"strconv"
-	"fmt"
+	"bytes"
 	"encoding/json"
-	"unicode"
+	"fmt"
+	"git.reaxoft.loc/infomir/director/dnsgate"
 	"github.com/miekg/dns"
+	"strconv"
+	"strings"
+	"unicode"
 )
 
 const (
-	ErrDirWrongPort   = "director_wrong_port"
-	ErrDirWrongSrvName = "director_wrong_srv_name"
-	ErrDirWrongSrvType = "director_wrong_srv_type"
-	ErrDirWrongTxtString = "director_wrong_txt_string"
+	ErrDirWrongPort        = "director_wrong_port"
+	ErrDirWrongSrvName     = "director_wrong_srv_name"
+	ErrDirWrongSrvType     = "director_wrong_srv_type"
+	ErrDirWrongTxtString   = "director_wrong_txt_string"
 	ErrDirWrongSrvNotFound = "director_srv_not_found"
 )
 
 type DirectorError struct {
-	Code string
+	Code  string
 	Msg   string
 	MsgId string
 }
@@ -30,8 +31,8 @@ func (e *DirectorError) Error() string {
 
 func (e *DirectorError) Json() []byte {
 	j, _ := json.Marshal(map[string]string{
-		"code":   e.Code,
-		"msg":    e.Msg,
+		"code": e.Code,
+		"msg":  e.Msg,
 	})
 	return j
 }
@@ -39,9 +40,11 @@ func (e *DirectorError) Json() []byte {
 func NewDirectorError(code string, msg string, a ...interface{}) *DirectorError {
 	return &DirectorError{Code: code, Msg: fmt.Sprintf(msg, a...)}
 }
+
 type Director struct {
-	gate dnsgate.DnsGate
+	gate   dnsgate.DnsGate
 	domain string
+	zone   string
 }
 
 func NewDirector(domain, server, keypath string) (*Director, error) {
@@ -60,7 +63,7 @@ func NewDirector(domain, server, keypath string) (*Director, error) {
 	if e != nil {
 		return nil, e
 	}
-	return &Director{gate: dg, domain: domain}, nil
+	return &Director{gate: dg, domain: domain, zone: domain + "."}, nil
 }
 
 func (d *Director) attachSrvToType(srvType, srvName string) (*dns.PTR, error) {
@@ -136,7 +139,7 @@ func (d *Director) addServRules(srvName string, params map[string]string) (*dns.
 			for i := 0; i < len(v); i++ {
 				if v[i] == '\\' {
 					i++
-					if i + 2 < len(v) && isDigit(v[i]) && isDigit(v[i + 1]) && isDigit(v[i + 2]) {
+					if i+2 < len(v) && isDigit(v[i]) && isDigit(v[i+1]) && isDigit(v[i+2]) {
 						i += 2
 					}
 				}
@@ -148,15 +151,15 @@ func (d *Director) addServRules(srvName string, params map[string]string) (*dns.
 			}
 			fullLen += strLen + 1
 
-			if(fullLen > 1300) {
+			if fullLen > 1300 {
 				return nil, NewDirectorError(ErrDirWrongTxtString, "String section of a TXT resource record exceeded 1300 bytes")
 			}
 			if k == "txtvers" {
 				str[0] = k + "=" + v
 			} else {
-				str = append(str, k + "=" + v)
+				str = append(str, k+"="+v)
 			}
-		}	
+		}
 		if str[0] == "" {
 			str = str[1:]
 		}
@@ -180,7 +183,7 @@ func validateSrvType(srvType string) error {
 	parts := strings.Split(srvType, ".")
 	for _, p := range parts {
 		if pos := strings.IndexFunc(p, isNotAllowedCharacter); pos != -1 {
-			return NewDirectorError(ErrDirWrongSrvType, "Service type contains not allowed character '%s'", p[pos:pos + 1])
+			return NewDirectorError(ErrDirWrongSrvType, "Service type contains not allowed character '%s'", p[pos:pos+1])
 		}
 		if p[0] != '_' {
 			return NewDirectorError(ErrDirWrongSrvType, "Service type's parts must start with '_'")
@@ -194,7 +197,7 @@ func validateSrvNameWithoutType(srvName string) error {
 		return NewDirectorError(ErrDirWrongSrvName, "Service name coincides with a service type")
 	}
 	if pos := strings.IndexFunc(srvName, isNotAllowedCharacter); pos != -1 {
-		return NewDirectorError(ErrDirWrongSrvName, "Starting part of a service name contains not allowed character '%s'", srvName[pos:pos + 1])
+		return NewDirectorError(ErrDirWrongSrvName, "Starting part of a service name contains not allowed character '%s'", srvName[pos:pos+1])
 	}
 	if srvName[0] == '_' {
 		return NewDirectorError(ErrDirWrongSrvName, "Service name mut not start with '_'")
@@ -214,7 +217,7 @@ func validateSrvName(srvName string) error {
 	parts := strings.Split(srvName, ".")
 	for i, p := range parts {
 		if pos := strings.IndexFunc(p, isNotAllowedCharacter); pos != -1 {
-			return NewDirectorError(ErrDirWrongSrvName, "Service name contains not allowed character '%s'", p[pos:pos + 1])
+			return NewDirectorError(ErrDirWrongSrvName, "Service name contains not allowed character '%s'", p[pos:pos+1])
 		}
 		if i > 0 && p[0] != '_' {
 			return NewDirectorError(ErrDirWrongSrvName, "Middle service name's parts must start with '_'")
@@ -273,3 +276,37 @@ func (d *Director) findByType(srvType string) ([]*dns.PTR, error) {
 	return ptrs, nil
 }
 
+type DnsService struct {
+	Type     string `json:"type"`
+	Name     string `json:"name"`
+	Server   string `json:"server"`
+	Port     uint16 `json:"port"`
+	Path     string `json:"path"`
+	Ttl      uint32 `json:"Ttl"`
+	Priority uint16 `json:"priority"`
+	Weight   uint16 `json:"weight"`
+}
+
+func (d *Director) withDomain(p string) string {
+	b := bytes.NewBufferString(p)
+	b.WriteRune('.')
+	b.WriteString(d.domain)
+	return b.String()
+}
+
+func (d *Director) RegDnsSrv(srv *DnsService) error {
+	fName := d.withDomain(srv.Name)
+	rPtr, err := d.attachSrvToType(d.withDomain(srv.Type), fName)
+	if err != nil {
+		return err
+	}
+	rSrv, err := d.assignSrvToServer(fName, d.withDomain(srv.Server), srv.Port, srv.Ttl, srv.Priority, srv.Weight)
+	if err != nil {
+		return err
+	}
+	rTxt, err := d.addServRules(fName, map[string]string{"path": srv.Path})
+	if err != nil {
+		return err
+	}
+	return d.gate.Add(d.zone, []dns.RR{rPtr, rSrv, rTxt})
+}

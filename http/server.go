@@ -68,28 +68,26 @@ func (ds *DirectorServer) SetDnsPk(pk string) {
 }
 
 func (ds *DirectorServer) Run() {
-	dr, err := core.NewDirector(ds.domain, ds.dnsserver, ds.dnspk)
+	dr, err := director.NewDirector(ds.domain, ds.dnsserver, ds.dnspk)
 	if err != nil {
 		logger.Error("Failed to create connection pool: %s", err.Error())
 		panic(err)
 	}
-	//todo: remove it
-	logger.Info("Director created: %v", dr)
 
 	router := httprouter.New()
 	router.PUT(ds.root+"/services", CreateDualJsonAction(func(src *json.Decoder, sink *JsonSink, p httprouter.Params, q url.Values) {
-		var ds DnsService
+		var ds director.DnsService
 		if e := src.Decode(&ds); e != nil {
-			logger.Error("Can't decode JSON to DNSService: %s", e.Error())
+			logger.Error("Can't decode JSON to object: %s", e.Error())
 			sink.pushError(&ServerError{http.StatusBadRequest, ErrBadRequest, "bad JSON: " + e.Error()})
 			return
 		}
-		//todo: process dns service
-		/*if o, e := proc.Put(p.ByName("name"), srsc.Value); e != nil {
+		if e := dr.RegDnsSrv(&ds); e != nil {
+			logger.Error("Registration service failed: %s", e.Error())
 			sink.pushError(e)
 		} else {
-			sink.pushGeneric(o)
-		}*/
+			sink.pushCreated()
+		}
 	}))
 
 	router.GET(ds.root+"/service/:type", CreateJsonAction(func(_ io.ReadCloser, js *JsonSink, p httprouter.Params, q url.Values) {
@@ -135,6 +133,10 @@ func returnError(w http.ResponseWriter, e error) {
 	switch e := e.(type) {
 	case *ServerError:
 		w.WriteHeader(e.status)
+		w.Write(e.Json())
+		return
+	case *director.DirectorError:
+		w.WriteHeader(http.StatusBadRequest)
 		w.Write(e.Json())
 		return
 	default:
@@ -185,15 +187,8 @@ func (js *JsonSink) pushEmpty() {
 	js.rw.WriteHeader(http.StatusNoContent)
 }
 
-type DnsService struct {
-	Type     string `json:"type"`
-	Name     string `json:"name"`
-	Server   string `json:"server"`
-	Port     string `json:"port"`
-	Path     string `json:"path"`
-	CacheTtl int    `json:"cachettl"`
-	Priority int    `json:"priority"`
-	Weight   int    `json:"weight"`
+func (js *JsonSink) pushCreated() {
+	js.rw.WriteHeader(http.StatusCreated)
 }
 
 type httpRequest http.Request
