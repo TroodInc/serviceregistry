@@ -254,3 +254,22 @@ func (d *Director) findSrv(srvName string) ([]*dns.SRV, *dns.TXT, error) {
 	return srvs, txt, nil
 }
 
+func (d *Director) findByType(srvType string) ([]*dns.PTR, error) {
+	if e := validateSrvType(srvType); e != nil {
+		return nil, e
+	}
+
+	rrs, e := d.gate.Query(dns.TypePTR, srvType)
+	if e != nil {
+		return nil, e
+	}
+	ptrs := make([]*dns.PTR, 0, len(rrs))
+	for _, rr := range rrs {
+		switch t := rr.(type) {
+		case (*dns.PTR):
+			ptrs = append(ptrs, t)
+		}
+	}
+	return ptrs, nil
+}
+
