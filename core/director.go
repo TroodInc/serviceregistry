@@ -15,6 +15,7 @@ const (
 	ErrDirWrongSrvName = "director_wrong_srv_name"
 	ErrDirWrongSrvType = "director_wrong_srv_type"
 	ErrDirWrongTxtString = "director_wrong_txt_string"
+	ErrDirWrongSrvNotFound = "director_srv_not_found"
 )
 
 type DirectorError struct {
@@ -220,5 +221,36 @@ func validateSrvName(srvName string) error {
 		}
 	}
 	return nil
+}
+
+func (d *Director) findSrv(srvName string) ([]*dns.SRV, *dns.TXT, error) {
+	if e := validateSrvName(srvName); e != nil {
+		return nil, nil, e
+	}
+
+	rrs, e := d.gate.Query(dns.TypeANY, srvName)
+	if e != nil {
+		return nil, nil, e
+	}
+
+	var srvs []*dns.SRV
+	var txt *dns.TXT
+	for _, rr := range rrs {
+		switch t := rr.(type) {
+		case (*dns.SRV):
+			srvs = append(srvs, t)
+		case (*dns.TXT):
+			txt = t
+		}
+	}
+
+	if len(srvs) == 0 {
+		return nil, nil, NewDirectorError(ErrDirWrongSrvNotFound, "SRV records not found for service '%s'", srvName)
+	}
+
+	if txt == nil {
+		return nil, nil, NewDirectorError(ErrDirWrongSrvNotFound, "TXT record not found for service '%s'", srvName)
+	}
+	return srvs, txt, nil
 }
 
