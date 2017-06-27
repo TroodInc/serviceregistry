@@ -68,7 +68,7 @@ func (d *Director) attachSrvToType(srvType, srvName string) (*dns.PTR, error) {
 		return nil, NewDirectorError(ErrDirWrongSrvName, "Service name must start with a service type")
 	}
 
-	if e := validateSrvType(srvType); e != nil {
+	if e := validateSrvType(strings.TrimSuffix(srvType, d.domain)); e != nil {
 		return nil, e
 	}
 
@@ -83,7 +83,7 @@ func (d *Director) attachSrvToType(srvType, srvName string) (*dns.PTR, error) {
 }
 
 func (d *Director) assignSrvToServer(srvName string, server string, port uint16, ttl uint32, priority uint16, weight uint16) (*dns.SRV, error) {
-	if e := validateSrvName(srvName); e != nil {
+	if e := validateSrvName(strings.TrimSuffix(srvName, d.domain)); e != nil {
 		return nil, e
 	}
 
@@ -115,7 +115,7 @@ func isDigit(c byte) bool {
 }
 
 func (d *Director) addServRules(srvName string, params map[string]string) (*dns.TXT, error) {
-	if e := validateSrvName(srvName); e != nil {
+	if e := validateSrvName(strings.TrimSuffix(srvName, d.domain)); e != nil {
 		return nil, e
 	}
 
