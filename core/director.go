@@ -65,14 +65,15 @@ func NewDirector(domain, server, keypath string) (*Director, error) {
 		return nil, e
 	}
 
-	var fqdn string = domain
-	if strings.HasPrefix(fqdn, ".") {
+	var zone = domain
+	if !strings.HasSuffix(zone, ".") {
+		zone = zone + "."
+	}
+	var fqdn string = zone
+	if !strings.HasPrefix(fqdn, ".") {
 		fqdn = "." + fqdn
 	}
-	if strings.HasSuffix(fqdn, ".") {
-		fqdn = fqdn + "."
-	}
-	return &Director{gate: dg, domain: fqdn, zone: fqdn}, nil
+	return &Director{gate: dg, domain: fqdn, zone: zone}, nil
 }
 
 func (d *Director) attachSrvToType(srvType, srvName string) (*dns.PTR, error) {
@@ -84,7 +85,7 @@ func (d *Director) attachSrvToType(srvType, srvName string) (*dns.PTR, error) {
 		return nil, e
 	}
 
-	if e := validateSrvNameWithoutType(strings.TrimSuffix(srvName, "." + srvType)); e != nil {
+	if e := validateSrvNameWithoutType(strings.TrimSuffix(srvName, "."+srvType)); e != nil {
 		return nil, e
 	}
 
@@ -322,14 +323,14 @@ func (d *Director) withDomain(p string) string {
 }
 
 func (d *Director) RegDnsSrv(srv *DnsService) error {
-	cName := d.withDomain(srv.fullName()) + "."
-	cType := d.withDomain(srv.Type) + "."
+	cName := d.withDomain(srv.fullName())
+	cType := d.withDomain(srv.Type)
 	rPtr, err := d.attachSrvToType(cType, cName)
 	if err != nil {
 		logger.Error("Attach service to type failed: %s", err.Error())
 		return err
 	}
-	rSrv, err := d.assignSrvToServer(cName, d.withDomain(srv.Server) + ".", srv.Port, srv.Ttl, srv.Priority, srv.Weight)
+	rSrv, err := d.assignSrvToServer(cName, d.withDomain(srv.Server), srv.Port, srv.Ttl, srv.Priority, srv.Weight)
 	if err != nil {
 		logger.Error("Assign service to server failed: %s", err.Error())
 		return err
@@ -339,7 +340,6 @@ func (d *Director) RegDnsSrv(srv *DnsService) error {
 		logger.Error("Add service rules failed: %s", err.Error())
 		return err
 	}
-	//todo: change zoneid
 	return d.gate.Add(d.zone, []dns.RR{rPtr, rSrv, rTxt})
 }
 
