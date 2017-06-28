@@ -1,30 +1,31 @@
 package dnsgate
 
 import (
-	"encoding/json"
-	"fmt"
-	"github.com/miekg/dns"
-	"os"
-	"strings"
-	"sync/atomic"
-	"strconv"
-	"time"
 	"crypto"
 	"crypto/rsa"
+	"encoding/json"
+	"fmt"
+	"git.reaxoft.loc/infomir/director/logger"
+	"github.com/miekg/dns"
+	"os"
+	"strconv"
+	"strings"
+	"sync/atomic"
+	"time"
 )
 
 const (
-	ErrDnsConnectionError   = "dns_connection_error"
-	ErrDnsConnectionTimeout = "dns_connection_timeout"
-	ErrDnsWriteTimeout      = "dns_write_timeout"
-	ErrDnsReadTimeout       = "dns_read_timeout"
-	ErrDnsInternalError     = "dns_internal_error"
-	ErrDnsWrongKeyPath      = "dns_wrong_key_path"
-	ErrDnsSigningError      = "dns_signing_error"
-	ErrDnsBadResponseMessage      = "dns_bad_response_message"
-	ErrDnsBadMessage      = "dns_bad_message"
-	ErrDnsUpdateFailed      = "dns_update_failed"
-	ErrDnsQueryFailed      = "dns_query_failed"
+	ErrDnsConnectionError    = "dns_connection_error"
+	ErrDnsConnectionTimeout  = "dns_connection_timeout"
+	ErrDnsWriteTimeout       = "dns_write_timeout"
+	ErrDnsReadTimeout        = "dns_read_timeout"
+	ErrDnsInternalError      = "dns_internal_error"
+	ErrDnsWrongKeyPath       = "dns_wrong_key_path"
+	ErrDnsSigningError       = "dns_signing_error"
+	ErrDnsBadResponseMessage = "dns_bad_response_message"
+	ErrDnsBadMessage         = "dns_bad_message"
+	ErrDnsUpdateFailed       = "dns_update_failed"
+	ErrDnsQueryFailed        = "dns_query_failed"
 )
 
 type DnsError struct {
@@ -59,17 +60,17 @@ const poolMaxSize uint32 = 16
 
 const (
 	ConnectionTimeoutSec time.Duration = 30 * time.Second
-	WriteTimeoutSec      = 30 * time.Second
-	ReadTimeoutSec       = 30 * time.Second
+	WriteTimeoutSec                    = 30 * time.Second
+	ReadTimeoutSec                     = 30 * time.Second
 )
 
 type pooledUdpDnsGate struct {
 	pool     chan *udpGate
 	poolSize uint32
 
-	domain string
-	port   uint16
-	key    *dns.KEY
+	domain  string
+	port    uint16
+	key     *dns.KEY
 	privkey crypto.PrivateKey
 }
 
@@ -122,7 +123,7 @@ func (p *pooledUdpDnsGate) acquire() (g *udpGate, err error) {
 	select {
 	case con := <-p.pool:
 		return con, nil
-	default: 
+	default:
 		if atomic.LoadUint32(&p.poolSize) >= poolMaxSize {
 			con := <-p.pool
 			return con, nil
@@ -139,7 +140,7 @@ func (p *pooledUdpDnsGate) acquire() (g *udpGate, err error) {
 						g = nil
 					}
 				}()
-				con, e := NewUdpGate(p.domain + ":" + strconv.FormatUint(uint64(p.port), 10), ConnectionTimeoutSec)
+				con, e := NewUdpGate(p.domain+":"+strconv.FormatUint(uint64(p.port), 10), ConnectionTimeoutSec)
 				if e != nil {
 					atomic.AddUint32(&p.poolSize, ^uint32(0))
 					return nil, e
@@ -157,7 +158,7 @@ func (p *pooledUdpDnsGate) release(g *udpGate) {
 		g.Release()
 	} else {
 		select {
-		case p.pool<- g:
+		case p.pool <- g:
 			return
 		default:
 			atomic.AddUint32(&p.poolSize, ^uint32(0))
@@ -184,26 +185,31 @@ func (p *pooledUdpDnsGate) Add(zone string, srv []dns.RR) error {
 
 	mb, e := sig.Sign(p.privkey.(*rsa.PrivateKey), m)
 	if e != nil {
+		logger.Error("Signing error: %s", e.Error())
 		return NewDnsError(strconv.FormatUint(uint64(m.Id), 10), ErrDnsSigningError, "Signing error: %s", e.Error())
 	}
 
 	g, e := p.acquire()
 	if e != nil {
+		logger.Error("Getting connection error: %s", e.Error())
 		return e
 	}
 	defer p.release(g)
 
 	rb, e := g.SendMessageSync(mb)
 	if e != nil {
+		logger.Error("Sending message to DNS Server error: %s", e.Error())
 		return e
 	}
 
 	r := new(dns.Msg)
 	if err := r.Unpack(rb); err != nil {
+		logger.Error("Unpacking DNS response message error: %s", e.Error())
 		return NewDnsError(strconv.FormatUint(uint64(m.Id), 10), ErrDnsBadResponseMessage, "Bad response message: '%s'", err.Error())
 	}
 
 	if r != nil && r.Rcode != dns.RcodeSuccess {
+		logger.Error("DNS update failed: %s", r.String())
 		return NewDnsError(strconv.FormatUint(uint64(m.Id), 10), ErrDnsUpdateFailed, "DNS update failed: '%v'", r)
 	}
 	return nil

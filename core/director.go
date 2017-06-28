@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"git.reaxoft.loc/infomir/director/dnsgate"
+	"git.reaxoft.loc/infomir/director/logger"
 	"github.com/miekg/dns"
 	"strconv"
 	"strings"
@@ -63,25 +64,25 @@ func NewDirector(domain, server, keypath string) (*Director, error) {
 	if e != nil {
 		return nil, e
 	}
-	return &Director{gate: dg, domain: domain, zone: domain + "."}, nil
+	return &Director{gate: dg, domain: "." + domain, zone: "." + domain + "."}, nil
 }
 
 func (d *Director) attachSrvToType(srvType, srvName string) (*dns.PTR, error) {
 	if !strings.HasSuffix(srvName, srvType) {
-		return nil, NewDirectorError(ErrDirWrongSrvName, "Service name must start with a service type")
+		return nil, NewDirectorError(ErrDirWrongSrvName, "Service name must end with a service type")
 	}
 
 	if e := validateSrvType(strings.TrimSuffix(srvType, d.domain)); e != nil {
 		return nil, e
 	}
 
-	if e := validateSrvNameWithoutType(strings.TrimSuffix(srvName, srvType)); e != nil {
+	if e := validateSrvNameWithoutType(strings.TrimSuffix(srvName, "."+srvType)); e != nil {
 		return nil, e
 	}
 
 	ptr := new(dns.PTR)
-	ptr.Hdr = dns.RR_Header{srvType, dns.TypePTR, dns.ClassINET, 0, 0}
-	ptr.Ptr = srvName
+	ptr.Hdr = dns.RR_Header{srvType + ".", dns.TypePTR, dns.ClassINET, 0, 0}
+	ptr.Ptr = srvName + "."
 	return ptr, nil
 }
 
@@ -91,8 +92,8 @@ func (d *Director) assignSrvToServer(srvName string, server string, port uint16,
 	}
 
 	srv := new(dns.SRV)
-	srv.Hdr = dns.RR_Header{srvName, dns.TypeSRV, dns.ClassINET, ttl, 0}
-	srv.Target = server
+	srv.Hdr = dns.RR_Header{srvName + ".", dns.TypeSRV, dns.ClassINET, ttl, 0}
+	srv.Target = server + "."
 	srv.Port = port
 	srv.Priority = priority
 	srv.Weight = weight
@@ -131,7 +132,7 @@ func (d *Director) addServRules(srvName string, params map[string]string) (*dns.
 			if len(k) < 1 || len(k) > 9 {
 				return nil, NewDirectorError(ErrDirWrongTxtString, "TXT key must have length between 1 and 9")
 			}
-			if pos := strings.IndexFunc(srvName, isNotAllowedCharacter); pos != -1 {
+			if pos := strings.IndexFunc(srvName, isNotAllowedTxtKeyCharacter); pos != -1 {
 				return nil, NewDirectorError(ErrDirWrongTxtString, "TXT key contains a not allowed character")
 			}
 
@@ -166,7 +167,7 @@ func (d *Director) addServRules(srvName string, params map[string]string) (*dns.
 	}
 
 	txt := new(dns.TXT)
-	txt.Hdr = dns.RR_Header{srvName, dns.TypeTXT, dns.ClassINET, 0, 0}
+	txt.Hdr = dns.RR_Header{srvName + ".", dns.TypeTXT, dns.ClassINET, 0, 0}
 	txt.Txt = str
 	return txt, nil
 }
@@ -301,26 +302,34 @@ type DnsService struct {
 	Weight   uint16 `json:"weight"`
 }
 
-func (d *Director) withDomain(p string) string {
-	b := bytes.NewBufferString(p)
+func (ds *DnsService) fullName() string {
+	b := bytes.NewBufferString(ds.Name)
 	b.WriteRune('.')
-	b.WriteString(d.domain)
+	b.WriteString(ds.Type)
 	return b.String()
 }
 
+func (d *Director) withDomain(p string) string {
+	return p + d.domain
+}
+
 func (d *Director) RegDnsSrv(srv *DnsService) error {
-	fName := d.withDomain(srv.Name)
-	rPtr, err := d.attachSrvToType(d.withDomain(srv.Type), fName)
+	cName := d.withDomain(srv.fullName())
+	rPtr, err := d.attachSrvToType(d.withDomain(srv.Type), cName)
 	if err != nil {
+		logger.Error("Attach service to type failed: %s", err.Error())
 		return err
 	}
-	rSrv, err := d.assignSrvToServer(fName, d.withDomain(srv.Server), srv.Port, srv.Ttl, srv.Priority, srv.Weight)
+	rSrv, err := d.assignSrvToServer(cName, d.withDomain(srv.Server), srv.Port, srv.Ttl, srv.Priority, srv.Weight)
 	if err != nil {
+		logger.Error("Assign service to server failed: %s", err.Error())
 		return err
 	}
-	rTxt, err := d.addServRules(fName, map[string]string{"path": srv.Path})
+	rTxt, err := d.addServRules(cName, map[string]string{"path": srv.Path})
 	if err != nil {
+		logger.Error("Add service rules failed: %s", err.Error())
 		return err
 	}
-	return d.gate.Add(d.zone, []dns.RR{rPtr, rSrv, rTxt})
+	//todo: change zoneid
+	return d.gate.Add("cust.rxt.", []dns.RR{rPtr, rSrv, rTxt})
 }

@@ -83,7 +83,6 @@ func (ds *DirectorServer) Run() {
 			return
 		}
 		if e := dr.RegDnsSrv(&ds); e != nil {
-			logger.Error("Registration service failed: %s", e.Error())
 			sink.pushError(e)
 		} else {
 			sink.pushCreated()
