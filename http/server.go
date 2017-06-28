@@ -89,19 +89,21 @@ func (ds *DirectorServer) Run() {
 		}
 	}))
 
-	router.GET(ds.root+"/service/:type", CreateJsonAction(func(_ io.ReadCloser, js *JsonSink, p httprouter.Params, q url.Values) {
-		js.pushError(&ServerError{http.StatusNotImplemented, ErrInternalServerError, "Has not realized yet"})
-		//todo: do it
-		//return array of DNSService's names
+	router.GET(ds.root+"/services/:type", CreateJsonAction(func(_ io.ReadCloser, sink *JsonSink, p httprouter.Params, q url.Values) {
+		if names, e := dr.FindDnsSrvNames(p.ByName("type")); e != nil {
+			sink.pushError(e)
+		} else {
+			sink.push(names)
+		}
 	}))
 
-	router.GET(ds.root+"/service/:type/:name", CreateJsonAction(func(_ io.ReadCloser, js *JsonSink, p httprouter.Params, q url.Values) {
+	router.GET(ds.root+"/services/:type/:name", CreateJsonAction(func(_ io.ReadCloser, js *JsonSink, p httprouter.Params, q url.Values) {
 		js.pushError(&ServerError{http.StatusNotImplemented, ErrInternalServerError, "Has not realized yet"})
 		//todo: do it
 		//return array of DNSService
 	}))
 
-	router.DELETE(ds.root+"/service/:type/:name", CreateJsonAction(func(_ io.ReadCloser, js *JsonSink, p httprouter.Params, q url.Values) {
+	router.DELETE(ds.root+"/services/:type/:name", CreateJsonAction(func(_ io.ReadCloser, js *JsonSink, p httprouter.Params, q url.Values) {
 		js.pushError(&ServerError{http.StatusNotImplemented, ErrInternalServerError, "Has not realized yet"})
 		//possible query parameters: server, port
 		//todo: remove

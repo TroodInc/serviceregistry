@@ -333,3 +333,17 @@ func (d *Director) RegDnsSrv(srv *DnsService) error {
 	//todo: change zoneid
 	return d.gate.Add("cust.rxt.", []dns.RR{rPtr, rSrv, rTxt})
 }
+
+func (d *Director) FindDnsSrvNames(srvType string) ([]string, error) {
+	ptrs, err := d.findByType(d.withDomain(srvType))
+	if err != nil {
+		logger.Error("Finding PTRs by type error: %s", err.Error())
+		return nil, err
+	}
+
+	names := make([]string, len(ptrs), len(ptrs))
+	for i := range ptrs {
+		names[i] = ptrs[i].Ptr
+	}
+	return names, nil
+}
