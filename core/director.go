@@ -64,7 +64,15 @@ func NewDirector(domain, server, keypath string) (*Director, error) {
 	if e != nil {
 		return nil, e
 	}
-	return &Director{gate: dg, domain: "." + domain, zone: "." + domain + "."}, nil
+
+	var fqdn string = domain
+	if strings.HasPrefix(fqdn, ".") {
+		fqdn = "." + fqdn
+	}
+	if strings.HasSuffix(fqdn, ".") {
+		fqdn = fqdn + "."
+	}
+	return &Director{gate: dg, domain: fqdn, zone: fqdn}, nil
 }
 
 func (d *Director) attachSrvToType(srvType, srvName string) (*dns.PTR, error) {
@@ -76,13 +84,13 @@ func (d *Director) attachSrvToType(srvType, srvName string) (*dns.PTR, error) {
 		return nil, e
 	}
 
-	if e := validateSrvNameWithoutType(strings.TrimSuffix(srvName, "."+srvType)); e != nil {
+	if e := validateSrvNameWithoutType(strings.TrimSuffix(srvName, "." + srvType)); e != nil {
 		return nil, e
 	}
 
 	ptr := new(dns.PTR)
-	ptr.Hdr = dns.RR_Header{srvType + ".", dns.TypePTR, dns.ClassINET, 0, 0}
-	ptr.Ptr = srvName + "."
+	ptr.Hdr = dns.RR_Header{srvType, dns.TypePTR, dns.ClassINET, 0, 0}
+	ptr.Ptr = srvName
 	return ptr, nil
 }
 
@@ -92,8 +100,8 @@ func (d *Director) assignSrvToServer(srvName string, server string, port uint16,
 	}
 
 	srv := new(dns.SRV)
-	srv.Hdr = dns.RR_Header{srvName + ".", dns.TypeSRV, dns.ClassINET, ttl, 0}
-	srv.Target = server + "."
+	srv.Hdr = dns.RR_Header{srvName, dns.TypeSRV, dns.ClassINET, ttl, 0}
+	srv.Target = server
 	srv.Port = port
 	srv.Priority = priority
 	srv.Weight = weight
@@ -167,7 +175,7 @@ func (d *Director) addServRules(srvName string, params map[string]string) (*dns.
 	}
 
 	txt := new(dns.TXT)
-	txt.Hdr = dns.RR_Header{srvName + ".", dns.TypeTXT, dns.ClassINET, 0, 0}
+	txt.Hdr = dns.RR_Header{srvName, dns.TypeTXT, dns.ClassINET, 0, 0}
 	txt.Txt = str
 	return txt, nil
 }
@@ -181,7 +189,7 @@ func validateSrvType(srvType string) error {
 		return NewDirectorError(ErrDirWrongSrvType, "Service type is empty")
 	}
 
-	parts := strings.Split(srvType, ".")
+	parts := strings.Split(strings.TrimSuffix(srvType, "."), ".")
 	for _, p := range parts {
 		if pos := strings.IndexFunc(p, isNotAllowedCharacter); pos != -1 {
 			return NewDirectorError(ErrDirWrongSrvType, "Service type contains not allowed character '%s'", p[pos:pos+1])
@@ -215,7 +223,7 @@ func validateSrvName(srvName string) error {
 		return NewDirectorError(ErrDirWrongSrvName, "Service name must not start with '_'")
 	}
 
-	parts := strings.Split(srvName, ".")
+	parts := strings.Split(strings.TrimSuffix(srvName, "."), ".")
 	for i, p := range parts {
 		if pos := strings.IndexFunc(p, isNotAllowedCharacter); pos != -1 {
 			return NewDirectorError(ErrDirWrongSrvName, "Service name contains not allowed character '%s'", p[pos:pos+1])
@@ -314,13 +322,14 @@ func (d *Director) withDomain(p string) string {
 }
 
 func (d *Director) RegDnsSrv(srv *DnsService) error {
-	cName := d.withDomain(srv.fullName())
-	rPtr, err := d.attachSrvToType(d.withDomain(srv.Type), cName)
+	cName := d.withDomain(srv.fullName()) + "."
+	cType := d.withDomain(srv.Type) + "."
+	rPtr, err := d.attachSrvToType(cType, cName)
 	if err != nil {
 		logger.Error("Attach service to type failed: %s", err.Error())
 		return err
 	}
-	rSrv, err := d.assignSrvToServer(cName, d.withDomain(srv.Server), srv.Port, srv.Ttl, srv.Priority, srv.Weight)
+	rSrv, err := d.assignSrvToServer(cName, d.withDomain(srv.Server) + ".", srv.Port, srv.Ttl, srv.Priority, srv.Weight)
 	if err != nil {
 		logger.Error("Assign service to server failed: %s", err.Error())
 		return err
@@ -331,5 +340,5 @@ func (d *Director) RegDnsSrv(srv *DnsService) error {
 		return err
 	}
 	//todo: change zoneid
-	return d.gate.Add("cust.rxt.", []dns.RR{rPtr, rSrv, rTxt})
+	return d.gate.Add(d.zone, []dns.RR{rPtr, rSrv, rTxt})
 }
