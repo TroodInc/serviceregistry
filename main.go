@@ -43,7 +43,7 @@ type OptsDesc struct {
 // --dns-pk - private key to sign command for DNS (RFC2931). Default value is "./dns.private".
 // --log-file - log file path for a log output. By default the log output is stdout.
 // --log-level - logging level. Possible values: panic, fatal, error, warn, info, debug. By default "info".
-//Run example: ./director -a 172.25.0.144 -d cust.rxt --dns-s 172.25.0.160:53 --dns-pk /Users/szaytsev/Kszaytsev.cust.rxt.+008+33265.private --log-file ./director.log --log-level debug
+//Run example: ./director -a 172.25.0.144 -h szaytsev.cust.rxt -d cust.rxt --dns-s 172.25.0.160:53 --dns-pk /Users/szaytsev/Kszaytsev.cust.rxt.+008+33265.private --log-level debug
 //
 //Emaple of DNS configuration: https://0x2c.org/rfc2136-ddns-bind-dnssec-for-home-router-dynamic-dns/
 //Example of the command to generate dns-pk: dnssec-keygen -C -r /dev/urandom -a RSASHA256 -b 2048 -n HOST -T KEY ivanov.cust.rxt
