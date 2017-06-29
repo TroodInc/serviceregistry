@@ -51,3 +51,7 @@ func isInfoEnabled() bool {
 func Info(format string, args ...interface{}) {
 	logger.Infof(format, args...)
 }
+
+func Fatal(format string, args ...interface{}) {
+	logger.Fatalf(format, args...)
+}
