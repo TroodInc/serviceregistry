@@ -53,6 +53,7 @@ func NewDnsError(msgId string, code string, msg string, a ...interface{}) *DnsEr
 
 type DnsGate interface {
 	Add(zone string, srv []dns.RR) error
+	Remove(zone string, name string, rrs []dns.RR) error
 	Query(typ uint16, key string) ([]dns.RR, error)
 }
 
@@ -171,6 +172,63 @@ func (p *pooledUdpDnsGate) Add(zone string, srv []dns.RR) error {
 	m := new(dns.Msg)
 	m.SetUpdate(zone)
 	m.Insert(srv)
+
+	now := uint32(time.Now().Unix())
+	sig := new(dns.SIG)
+	sig.Hdr.Name = "."
+	sig.Hdr.Rrtype = dns.TypeSIG
+	sig.Hdr.Class = dns.ClassANY
+	sig.Algorithm = p.key.Algorithm
+	sig.SignerName = p.key.Hdr.Name
+	sig.Expiration = now + 300
+	sig.Inception = now - 300
+	sig.KeyTag = p.key.KeyTag()
+
+	mb, e := sig.Sign(p.privkey.(*rsa.PrivateKey), m)
+	if e != nil {
+		logger.Error("Signing error: %s", e.Error())
+		return NewDnsError(strconv.FormatUint(uint64(m.Id), 10), ErrDnsSigningError, "Signing error: %s", e.Error())
+	}
+
+	g, e := p.acquire()
+	if e != nil {
+		logger.Error("Getting connection error: %s", e.Error())
+		return e
+	}
+	defer p.release(g)
+
+	rb, e := g.SendMessageSync(mb)
+	if e != nil {
+		logger.Error("Sending message to DNS Server error: %s", e.Error())
+		return e
+	}
+
+	r := new(dns.Msg)
+	if err := r.Unpack(rb); err != nil {
+		logger.Error("Unpacking DNS response message error: %s", e.Error())
+		return NewDnsError(strconv.FormatUint(uint64(m.Id), 10), ErrDnsBadResponseMessage, "Bad response message: '%s'", err.Error())
+	}
+
+	if r != nil && r.Rcode != dns.RcodeSuccess {
+		logger.Error("DNS update failed: %s", r.String())
+		return NewDnsError(strconv.FormatUint(uint64(m.Id), 10), ErrDnsUpdateFailed, "DNS update failed: '%v'", r)
+	}
+	return nil
+}
+
+func (p *pooledUdpDnsGate) Remove(zone string, name string, rrs []dns.RR) error {
+	m := new(dns.Msg)
+	m.SetUpdate(zone)
+
+	if len(rrs) > 0 {
+		m.Remove(rrs)
+	}
+
+	if name != "" {
+		any := new(dns.ANY)
+		any.Hdr = dns.RR_Header{name, dns.TypeANY, dns.ClassINET, 0, 0}
+		m.RemoveName([]dns.RR{any})
+	}
 
 	now := uint32(time.Now().Unix())
 	sig := new(dns.SIG)
