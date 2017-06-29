@@ -298,8 +298,9 @@ func (p *pooledUdpDnsGate) Query(typ uint16, key string) ([]dns.RR, error) {
 		return nil, NewDnsError(strconv.FormatUint(uint64(m.Id), 10), ErrDnsBadResponseMessage, "Bad response message: '%s'", err.Error())
 	}
 
-	if r == nil || r.Rcode != dns.RcodeSuccess {
-		return nil, NewDnsError(strconv.FormatUint(uint64(m.Id), 10), ErrDnsUpdateFailed, "DNS update failed: '%v'", r)
+	if r == nil || r.Rcode != dns.RcodeSuccess && r.Rcode != dns.RcodeNameError {
+		logger.Debug("rcode: %d", r.Rcode)
+		return nil, NewDnsError(strconv.FormatUint(uint64(m.Id), 10), ErrDnsUpdateFailed, "DNS query failed: '%v'", r)
 	}
 	return r.Answer, nil
 }

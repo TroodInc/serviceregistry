@@ -132,10 +132,21 @@ func (ds *DirectorServer) regDnsServices(dr *director.Director) error {
 }
 
 func (ds *DirectorServer) delDnsServices(dr *director.Director) error {
-	if ds.srvtype != "" {
-
+	for _, si := range services {
+		if e := dr.RmInstance(si.name+ds.srvtype, ds.srvhostname, ds.port); e != nil {
+			return e
+		}
 	}
 	return nil
+}
+
+func getMandatoryQParam(q url.Values, name string) (string, error) {
+	v := q.Get(name)
+	if v == "" {
+		return "", &ServerError{http.StatusBadRequest, ErrBadRequest, "Required query parameter 'name' not found"}
+	} else {
+		return v, nil
+	}
 }
 
 func (ds *DirectorServer) Run() {
@@ -181,11 +192,10 @@ func (ds *DirectorServer) Run() {
 	}))
 
 	router.DELETE(ds.root+"/services/types/:type", CreateJsonAction(func(_ io.ReadCloser, sink *JsonSink, p httprouter.Params, q url.Values) {
-		name := q.Get("name")
-		if name == "" {
-			msg := "Required query parameter 'name' not found"
-			logger.Error(msg)
-			sink.pushError(&ServerError{http.StatusBadRequest, ErrBadRequest, msg})
+		name, err := getMandatoryQParam(q, "name")
+		if err != nil {
+			logger.Error(err.Error())
+			sink.pushError(err)
 			return
 		}
 
@@ -197,7 +207,32 @@ func (ds *DirectorServer) Run() {
 	}))
 
 	router.DELETE(ds.root+"/services/instances/:name", CreateJsonAction(func(_ io.ReadCloser, sink *JsonSink, p httprouter.Params, q url.Values) {
-		sink.pushError(&ServerError{http.StatusNotImplemented, ErrInternalServerError, "Has not realized yet"})
+		server, err := getMandatoryQParam(q, "server")
+		if err != nil {
+			logger.Error(err.Error())
+			sink.pushError(err)
+			return
+		}
+
+		sport, err := getMandatoryQParam(q, "port")
+		if err != nil {
+			logger.Error(err.Error())
+			sink.pushError(err)
+			return
+		}
+
+		port, err := strconv.ParseUint(sport, 10, 32)
+		if err != nil {
+			logger.Error(err.Error())
+			sink.pushError(err)
+			return
+		}
+
+		if e := dr.RmInstance(p.ByName("name"), server, uint16(port)); e != nil {
+			sink.pushError(e)
+		} else {
+			sink.pushEmpty()
+		}
 	}))
 
 	ds.s = &http.Server{
@@ -224,6 +259,14 @@ func (ds *DirectorServer) Run() {
 	}()
 
 	<-stop
+
+	logger.Info("Deleting director's instances of services in DNS ...")
+	if e := ds.delDnsServices(dr); e != nil {
+		logger.Error("Failed director's instances of services in DNS: %s", e.Error())
+	} else {
+		logger.Info("Director's instances of services has been deleted")
+	}
+
 	logger.Info("Shutting down Director server with %ds timeout ...", 10)
 	ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
 	ds.s.Shutdown(ctx)
@@ -246,6 +289,11 @@ func returnError(w http.ResponseWriter, e error) {
 		w.Write(e.Json())
 		return
 	case *director.DirectorError:
+		/*if e.Code == director.ErrDirWrongSrvNotFound {
+			w.WriteHeader(http.StatusNotFound)
+		} else {
+			w.WriteHeader(http.StatusBadRequest)
+		}*/
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write(e.Json())
 		return

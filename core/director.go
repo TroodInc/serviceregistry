@@ -12,12 +12,11 @@ import (
 )
 
 const (
-	ErrDirWrongPort        = "director_wrong_port"
-	ErrDirWrongSrvName     = "director_wrong_srv_name"
-	ErrDirWrongSrvType     = "director_wrong_srv_type"
-	ErrDirWrongServer      = "director_wrong_server"
-	ErrDirWrongTxtString   = "director_wrong_txt_string"
-	ErrDirWrongSrvNotFound = "director_srv_not_found"
+	ErrDirWrongPort      = "director_wrong_port"
+	ErrDirWrongSrvName   = "director_wrong_srv_name"
+	ErrDirWrongSrvType   = "director_wrong_srv_type"
+	ErrDirWrongServer    = "director_wrong_server"
+	ErrDirWrongTxtString = "director_wrong_txt_string"
 )
 
 type DirectorError struct {
@@ -257,23 +256,18 @@ func (d *Director) findSrv(srvName string) ([]*dns.SRV, map[string]string, error
 		}
 	}
 
-	if len(srvs) == 0 {
-		return nil, nil, NewDirectorError(ErrDirWrongSrvNotFound, "SRV records not found for service '%s'", srvName)
-	}
-
-	if txt == nil {
-		return nil, nil, NewDirectorError(ErrDirWrongSrvNotFound, "TXT record not found for service '%s'", srvName)
-	}
-
-	params := make(map[string]string, len(txt.Txt))
-	for _, s := range txt.Txt {
-		if s != "" {
-			kv := strings.SplitN(s, "=", 2)
-			if _, ok := params[kv[0]]; !ok {
-				if len(kv) == 2 {
-					params[kv[0]] = kv[1]
-				} else {
-					params[kv[0]] = ""
+	var params map[string]string = nil
+	if txt != nil {
+		params := make(map[string]string, len(txt.Txt))
+		for _, s := range txt.Txt {
+			if s != "" {
+				kv := strings.SplitN(s, "=", 2)
+				if _, ok := params[kv[0]]; !ok {
+					if len(kv) == 2 {
+						params[kv[0]] = kv[1]
+					} else {
+						params[kv[0]] = ""
+					}
 				}
 			}
 		}
@@ -374,7 +368,7 @@ func (d *Director) RmDnsSrv(srvtype, srvname string) error {
 		return NewDirectorError(ErrDirWrongSrvName, "Service name must end with a service type")
 	}
 
-	if e := validateSrvType(strings.TrimSuffix(csrvtype , d.domain)); e != nil {
+	if e := validateSrvType(strings.TrimSuffix(csrvtype, d.domain)); e != nil {
 		return e
 	}
 
@@ -394,14 +388,20 @@ func (d *Director) RmInstance(srvname, server string, port uint16) error {
 		logger.Error("service name '%s' does not end with '%s' domain", srvname, d.domain)
 		return NewDirectorError(ErrDirWrongSrvName, "service name '%s' does not end with '%s' domain", srvname, d.domain)
 	}
-	
-	if e := validateSrvName(strings.TrimSuffix(srvname, d.domain)); e != nil {
+
+	if e := validateSrvName(strings.TrimSuffix(csrvname, d.domain)); e != nil {
 		return e
+	}
+
+	cserver := dotCanon(server)
+	if !strings.HasSuffix(cserver, d.domain) {
+		logger.Error("server '%s' does not end with '%s' domain", server, d.domain)
+		return NewDirectorError(ErrDirWrongServer, "server '%s' does not end with '%s' domain", server, d.domain)
 	}
 
 	srv := new(dns.SRV)
 	srv.Hdr = dns.RR_Header{csrvname, dns.TypeSRV, dns.ClassINET, 0, 0}
-	srv.Target = server
+	srv.Target = cserver
 	srv.Port = port
 	return d.gate.Remove(d.zone, "", []dns.RR{srv})
 }

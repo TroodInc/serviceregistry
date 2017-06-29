@@ -1,0 +1,287 @@
+{
+	"variables": [],
+	"info": {
+		"name": "director",
+		"_postman_id": "819aa5c1-7957-358c-8186-edacce5011ee",
+		"description": "",
+		"schema": "https://schema.getpostman.com/json/collection/v2.0.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Get directory services",
+			"request": {
+				"url": "http://172.25.0.144:8080/director/services/types/_drt._rest_http.cust.rxt",
+				"method": "GET",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"description": ""
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n\t\"type\": \"_bo\",\n\t\"name\": \"person\",\n\t\"server\": \"szaytsev01\",\n\t\"port\": 8080,\n\t\"path\": \"/custodian/data/single/person\",\n\t\"ttl\": 3600,\n\t\"priority\": 0,\n\t\"weight\": 0\n}"
+				},
+				"description": "GET all service names by type"
+			},
+			"response": []
+		},
+		{
+			"name": "Get reg_srv service's instances",
+			"request": {
+				"url": "http://172.25.0.144:8080/director/services/instances/reg_srv._drt._rest_http.cust.rxt.",
+				"method": "GET",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"description": ""
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n\t\"type\": \"_bo\",\n\t\"name\": \"person\",\n\t\"server\": \"szaytsev01\",\n\t\"port\": 8080,\n\t\"path\": \"/custodian/data/single/person\",\n\t\"ttl\": 3600,\n\t\"priority\": 0,\n\t\"weight\": 0\n}"
+				},
+				"description": "GET all service names by type"
+			},
+			"response": []
+		},
+		{
+			"name": "Get get_srvs service's instances",
+			"request": {
+				"url": "http://172.25.0.144:8080/director/services/instances/get_srvs._drt._rest_http.cust.rxt.",
+				"method": "GET",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"description": ""
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n\t\"type\": \"_bo\",\n\t\"name\": \"person\",\n\t\"server\": \"szaytsev01\",\n\t\"port\": 8080,\n\t\"path\": \"/custodian/data/single/person\",\n\t\"ttl\": 3600,\n\t\"priority\": 0,\n\t\"weight\": 0\n}"
+				},
+				"description": "GET all service names by type"
+			},
+			"response": []
+		},
+		{
+			"name": "Get get_ins service's instances",
+			"request": {
+				"url": "http://172.25.0.144:8080/director/services/instances/get_ins._drt._rest_http.cust.rxt.",
+				"method": "GET",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"description": ""
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n\t\"type\": \"_bo\",\n\t\"name\": \"person\",\n\t\"server\": \"szaytsev01\",\n\t\"port\": 8080,\n\t\"path\": \"/custodian/data/single/person\",\n\t\"ttl\": 3600,\n\t\"priority\": 0,\n\t\"weight\": 0\n}"
+				},
+				"description": "GET all service names by type"
+			},
+			"response": []
+		},
+		{
+			"name": "Get del_ins service's instances",
+			"request": {
+				"url": "http://172.25.0.144:8080/director/services/instances/del_ins._drt._rest_http.cust.rxt.",
+				"method": "GET",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"description": ""
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n\t\"type\": \"_bo\",\n\t\"name\": \"person\",\n\t\"server\": \"szaytsev01\",\n\t\"port\": 8080,\n\t\"path\": \"/custodian/data/single/person\",\n\t\"ttl\": 3600,\n\t\"priority\": 0,\n\t\"weight\": 0\n}"
+				},
+				"description": "GET all service names by type"
+			},
+			"response": []
+		},
+		{
+			"name": "PUT a new service",
+			"request": {
+				"url": "http://172.25.0.144:8080/director/services/_bo._rest_http._tcp.cust.rxt",
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"description": ""
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n\t\"name\": \"person._bo._rest_http._tcp.cust.rxt\",\n\t\"server\": \"szaytsev01.cust.rxt\",\n\t\"port\": 8080,\n\t\"params\": {\n\t\t\"path\": \"/custodian/data/single/person\"\n\t},\n\t\"ttl\": 3600,\n\t\"priority\": 0,\n\t\"weight\": 0\n}"
+				},
+				"description": "PUT a new service"
+			},
+			"response": []
+		},
+		{
+			"name": "PUT a second instance of the service",
+			"request": {
+				"url": "http://172.25.0.144:8080/director/services/_bo._rest_http._tcp.cust.rxt",
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"description": ""
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n\t\"name\": \"person._bo._rest_http._tcp.cust.rxt\",\n\t\"server\": \"szaytsev02.cust.rxt\",\n\t\"port\": 8080,\n\t\"params\": {\n\t\t\"path\": \"/custodian/data/single/person\"\n\t},\n\t\"ttl\": 3600,\n\t\"priority\": 0,\n\t\"weight\": 0\n}"
+				},
+				"description": "PUT a new service"
+			},
+			"response": []
+		},
+		{
+			"name": "Get registered services by type",
+			"request": {
+				"url": "http://172.25.0.144:8080/director/services/types/_bo._rest_http._tcp.cust.rxt",
+				"method": "GET",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"description": ""
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n\t\"type\": \"_bo\",\n\t\"name\": \"person\",\n\t\"server\": \"szaytsev01\",\n\t\"port\": 8080,\n\t\"path\": \"/custodian/data/single/person\",\n\t\"ttl\": 3600,\n\t\"priority\": 0,\n\t\"weight\": 0\n}"
+				},
+				"description": "GET all service names by type"
+			},
+			"response": []
+		},
+		{
+			"name": "Get service's instances",
+			"request": {
+				"url": "http://172.25.0.144:8080/director/services/instances/person._bo._rest_http._tcp.cust.rxt",
+				"method": "GET",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"description": ""
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n\t\"type\": \"_bo\",\n\t\"name\": \"person\",\n\t\"server\": \"szaytsev01\",\n\t\"port\": 8080,\n\t\"path\": \"/custodian/data/single/person\",\n\t\"ttl\": 3600,\n\t\"priority\": 0,\n\t\"weight\": 0\n}"
+				},
+				"description": "GET all service names by type"
+			},
+			"response": []
+		},
+		{
+			"name": "Delete second instance of registered service",
+			"request": {
+				"url": {
+					"raw": "http://172.25.0.144:8080/director/services/instances/person._bo._rest_http._tcp.cust.rxt.?server=szaytsev02.cust.rxt.&port=8080",
+					"protocol": "http",
+					"host": [
+						"172",
+						"25",
+						"0",
+						"144"
+					],
+					"port": "8080",
+					"path": [
+						"director",
+						"services",
+						"instances",
+						"person._bo._rest_http._tcp.cust.rxt."
+					],
+					"query": [
+						{
+							"key": "server",
+							"value": "szaytsev02.cust.rxt.",
+							"equals": true,
+							"description": ""
+						},
+						{
+							"key": "port",
+							"value": "8080",
+							"equals": true,
+							"description": ""
+						}
+					],
+					"variable": []
+				},
+				"method": "DELETE",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"description": ""
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n\t\"type\": \"_bo\",\n\t\"name\": \"person\",\n\t\"server\": \"szaytsev01\",\n\t\"port\": 8080,\n\t\"path\": \"/custodian/data/single/person\",\n\t\"ttl\": 3600,\n\t\"priority\": 0,\n\t\"weight\": 0\n}"
+				},
+				"description": "GET all service names by type"
+			},
+			"response": []
+		},
+		{
+			"name": "Delete service",
+			"request": {
+				"url": {
+					"raw": "http://172.25.0.144:8080/director/services/types/_bo._rest_http._tcp.cust.rxt.?name=person._bo._rest_http._tcp.cust.rxt.",
+					"protocol": "http",
+					"host": [
+						"172",
+						"25",
+						"0",
+						"144"
+					],
+					"port": "8080",
+					"path": [
+						"director",
+						"services",
+						"types",
+						"_bo._rest_http._tcp.cust.rxt."
+					],
+					"query": [
+						{
+							"key": "name",
+							"value": "person._bo._rest_http._tcp.cust.rxt.",
+							"equals": true,
+							"description": ""
+						}
+					],
+					"variable": []
+				},
+				"method": "DELETE",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"description": ""
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n\t\"type\": \"_bo\",\n\t\"name\": \"person\",\n\t\"server\": \"szaytsev01\",\n\t\"port\": 8080,\n\t\"path\": \"/custodian/data/single/person\",\n\t\"ttl\": 3600,\n\t\"priority\": 0,\n\t\"weight\": 0\n}"
+				},
+				"description": "GET all service names by type"
+			},
+			"response": []
+		}
+	]
+}
