@@ -357,6 +357,37 @@ func (d *Director) RegDnsSrv(srvtype string, srv *DnsService) error {
 	return d.gate.Add(d.zone, []dns.RR{rPtr, rSrv, rTxt})
 }
 
+func (d *Director) RmDnsSrv(srvtype, srvname string) error {
+	csrvtype := dotCanon(srvtype)
+	if !strings.HasSuffix(csrvtype, d.domain) {
+		logger.Error("service type '%s' does not end with '%s' domain", srvtype, d.domain)
+		return NewDirectorError(ErrDirWrongSrvType, "service type '%s' does not end with '%s' domain", srvtype, d.domain)
+	}
+
+	csrvname := dotCanon(srvname)
+	if !strings.HasSuffix(csrvname, d.domain) {
+		logger.Error("service name '%s' does not end with '%s' domain", srvname, d.domain)
+		return NewDirectorError(ErrDirWrongSrvName, "service name '%s' does not end with '%s' domain", srvname, d.domain)
+	}
+
+	if !strings.HasSuffix(csrvname, srvtype) {
+		return NewDirectorError(ErrDirWrongSrvName, "Service name must end with a service type")
+	}
+
+	if e := validateSrvType(strings.TrimSuffix(csrvtype , d.domain)); e != nil {
+		return e
+	}
+
+	if e := validateSrvNameWithoutType(strings.TrimSuffix(csrvname, "."+csrvtype)); e != nil {
+		return e
+	}
+
+	ptr := new(dns.PTR)
+	ptr.Hdr = dns.RR_Header{csrvtype, dns.TypePTR, dns.ClassINET, 0, 0}
+	ptr.Ptr = csrvname
+	return d.gate.Remove(d.zone, csrvname, []dns.RR{ptr})
+}
+
 func (d *Director) FindDnsSrvNames(srvtype string) ([]string, error) {
 	ptrs, err := d.findByType(dotCanon(srvtype))
 	if err != nil {
