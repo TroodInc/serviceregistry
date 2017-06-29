@@ -1,16 +1,22 @@
 package http
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"git.reaxoft.loc/infomir/director/core"
 	"git.reaxoft.loc/infomir/director/logger"
 	"github.com/julienschmidt/httprouter"
 	"io"
+	"log"
 	"mime"
 	"net/http"
 	"net/textproto"
 	"net/url"
+	"os"
+	"os/signal"
+	"strconv"
+	"syscall"
 	"time"
 )
 
@@ -35,19 +41,26 @@ func (e *ServerError) Json() []byte {
 }
 
 type DirectorServer struct {
-	addr, port, root, domain, dnsserver, dnspk string
-	s                                          *http.Server
+	addr, root, domain     string
+	port                   uint16
+	dnsserver, dnspk       string
+	srvhostname            string
+	srvttl                 uint32
+	srvpriority, srvweight uint16
+	srvtype                string
+	basepath               string
+	s                      *http.Server
 }
 
-func NewServer(a, p, r, d, ds, dpk string) *DirectorServer {
-	return &DirectorServer{addr: a, port: p, root: r, domain: d, dnsserver: ds, dnspk: dpk}
+func NewServer(a string, p uint16, hostname string, r, d, ds, dpk string) *DirectorServer {
+	return &DirectorServer{addr: a, port: p, root: r, domain: d, dnsserver: ds, dnspk: dpk, srvhostname: hostname}
 }
 
 func (ds *DirectorServer) SetAddr(a string) {
 	ds.addr = a
 }
 
-func (ds *DirectorServer) SetPort(p string) {
+func (ds *DirectorServer) SetPort(p uint16) {
 	ds.port = p
 }
 
@@ -67,7 +80,67 @@ func (ds *DirectorServer) SetDnsPk(pk string) {
 	ds.dnspk = pk
 }
 
+func (ds *DirectorServer) SetSrvHostname(hostname string) {
+	ds.srvhostname = hostname
+}
+
+func (ds *DirectorServer) SetSrvTtl(ttl uint32) {
+	ds.srvttl = ttl
+}
+
+func (ds *DirectorServer) SetSrvPriority(priority uint16) {
+	ds.srvpriority = priority
+}
+
+func (ds *DirectorServer) SetSrvWeight(weight uint16) {
+	ds.srvweight = weight
+}
+
+type srvinfo struct {
+	name, method, path string
+}
+
+var services = []*srvinfo{
+	&srvinfo{"reg_srv.", "PUT", ""},
+	&srvinfo{"get_srvs.", "GET", "/types"},
+	&srvinfo{"get_ins.", "GET", "/intances"},
+	&srvinfo{"del_srv.", "DELETE", "/types"},
+	&srvinfo{"del_ins.", "DELETE", "/names"},
+}
+
+func (ds *DirectorServer) newService(info *srvinfo) *director.DnsService {
+	return &director.DnsService{
+		Name:     info.name + ds.srvtype,
+		Server:   ds.srvhostname,
+		Port:     ds.port,
+		Ttl:      ds.srvttl,
+		Priority: ds.srvpriority,
+		Weight:   ds.srvweight,
+		Params:   map[string]string{"path": ds.basepath + info.path, "method": info.method},
+	}
+}
+
+func (ds *DirectorServer) regDnsServices(dr *director.Director) error {
+	ds.srvtype = "_drt._rest_http." + ds.domain
+	ds.basepath = ds.root + "/services"
+	for _, si := range services {
+		if e := dr.RegDnsSrv(ds.srvtype, ds.newService(si)); e != nil {
+			return e
+		}
+	}
+	return nil
+}
+
+func (ds *DirectorServer) delDnsServices(dr *director.Director) error {
+	if ds.srvtype != "" {
+
+	}
+	return nil
+}
+
 func (ds *DirectorServer) Run() {
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	dr, err := director.NewDirector(ds.domain, ds.dnsserver, ds.dnspk)
 	if err != nil {
 		logger.Error("Failed to create connection pool: %s", err.Error())
@@ -116,15 +189,33 @@ func (ds *DirectorServer) Run() {
 	}))
 
 	ds.s = &http.Server{
-		Addr:           ds.addr + ":" + ds.port,
+		Addr:           ds.addr + ":" + strconv.FormatUint(uint64(ds.port), 10),
 		Handler:        router,
 		ReadTimeout:    60 * time.Second,
 		WriteTimeout:   60 * time.Second,
 		MaxHeaderBytes: 1 << 20,
 	}
 
-	logger.Info("Director server started.")
-	ds.s.ListenAndServe()
+	logger.Info("Registring director's services in DNS ...")
+	if e := ds.regDnsServices(dr); e != nil {
+		logger.Error("Filed to registring service: %s", e.Error())
+		log.Fatal(e)
+	}
+	logger.Info("Director's services has been registered")
+
+	go func() {
+		logger.Info("Director server listening on http://%s%s", ds.s.Addr, ds.root)
+		if err := ds.s.ListenAndServe(); err != http.ErrServerClosed {
+			logger.Error("Director server listening and serve failed: %s", err.Error())
+			log.Fatal(err)
+		}
+	}()
+
+	<-stop
+	logger.Info("Shutting down Director server with %ds timeout ...", 10)
+	ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
+	ds.s.Shutdown(ctx)
+	logger.Info("Directory server gracefully stopped")
 }
 
 func marshalError(code, msg string) []byte {
