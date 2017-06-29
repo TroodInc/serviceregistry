@@ -75,21 +75,23 @@ func (ds *DirectorServer) Run() {
 	}
 
 	router := httprouter.New()
-	router.PUT(ds.root+"/services", CreateDualJsonAction(func(src *json.Decoder, sink *JsonSink, p httprouter.Params, q url.Values) {
+
+	router.PUT(ds.root+"/services/:type", CreateDualJsonAction(func(src *json.Decoder, sink *JsonSink, p httprouter.Params, q url.Values) {
 		var ds director.DnsService
 		if e := src.Decode(&ds); e != nil {
 			logger.Error("Can't decode JSON to object: %s", e.Error())
 			sink.pushError(&ServerError{http.StatusBadRequest, ErrBadRequest, "bad JSON: " + e.Error()})
 			return
 		}
-		if e := dr.RegDnsSrv(&ds); e != nil {
+
+		if e := dr.RegDnsSrv(p.ByName("type"), &ds); e != nil {
 			sink.pushError(e)
 		} else {
 			sink.pushCreated()
 		}
 	}))
 
-	router.GET(ds.root+"/services/:type", CreateJsonAction(func(_ io.ReadCloser, sink *JsonSink, p httprouter.Params, q url.Values) {
+	router.GET(ds.root+"/services/types/:type", CreateJsonAction(func(_ io.ReadCloser, sink *JsonSink, p httprouter.Params, q url.Values) {
 		if names, e := dr.FindDnsSrvNames(p.ByName("type")); e != nil {
 			sink.pushError(e)
 		} else {
@@ -97,16 +99,20 @@ func (ds *DirectorServer) Run() {
 		}
 	}))
 
-	router.GET(ds.root+"/services/:type/:name", CreateJsonAction(func(_ io.ReadCloser, js *JsonSink, p httprouter.Params, q url.Values) {
-		js.pushError(&ServerError{http.StatusNotImplemented, ErrInternalServerError, "Has not realized yet"})
-		//todo: do it
-		//return array of DNSService
+	router.GET(ds.root+"/services/instances/:name", CreateJsonAction(func(_ io.ReadCloser, sink *JsonSink, p httprouter.Params, q url.Values) {
+		if instances, e := dr.FindDnsSrvInstances(p.ByName("name")); e != nil {
+			sink.pushError(e)
+		} else {
+			sink.push(instances)
+		}
 	}))
 
-	router.DELETE(ds.root+"/services/:type/:name", CreateJsonAction(func(_ io.ReadCloser, js *JsonSink, p httprouter.Params, q url.Values) {
-		js.pushError(&ServerError{http.StatusNotImplemented, ErrInternalServerError, "Has not realized yet"})
-		//possible query parameters: server, port
-		//todo: remove
+	router.DELETE(ds.root+"/services/types/:type", CreateJsonAction(func(_ io.ReadCloser, sink *JsonSink, p httprouter.Params, q url.Values) {
+		sink.pushError(&ServerError{http.StatusNotImplemented, ErrInternalServerError, "Has not realized yet"})
+	}))
+
+	router.DELETE(ds.root+"/services/instances/:name", CreateJsonAction(func(_ io.ReadCloser, sink *JsonSink, p httprouter.Params, q url.Values) {
+		sink.pushError(&ServerError{http.StatusNotImplemented, ErrInternalServerError, "Has not realized yet"})
 	}))
 
 	ds.s = &http.Server{

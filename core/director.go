@@ -1,7 +1,6 @@
 package director
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"git.reaxoft.loc/infomir/director/dnsgate"
@@ -16,6 +15,7 @@ const (
 	ErrDirWrongPort        = "director_wrong_port"
 	ErrDirWrongSrvName     = "director_wrong_srv_name"
 	ErrDirWrongSrvType     = "director_wrong_srv_type"
+	ErrDirWrongServer      = "director_wrong_server"
 	ErrDirWrongTxtString   = "director_wrong_txt_string"
 	ErrDirWrongSrvNotFound = "director_srv_not_found"
 )
@@ -76,7 +76,7 @@ func NewDirector(domain, server, keypath string) (*Director, error) {
 	return &Director{gate: dg, domain: fqdn, zone: zone}, nil
 }
 
-func (d *Director) attachSrvToType(srvType, srvName string) (*dns.PTR, error) {
+func (d *Director) attachSrvToType(srvType, srvName string, ttl uint32) (*dns.PTR, error) {
 	if !strings.HasSuffix(srvName, srvType) {
 		return nil, NewDirectorError(ErrDirWrongSrvName, "Service name must end with a service type")
 	}
@@ -301,41 +301,55 @@ func (d *Director) findByType(srvType string) ([]*dns.PTR, error) {
 }
 
 type DnsService struct {
-	Type     string `json:"type"`
-	Name     string `json:"name"`
-	Server   string `json:"server"`
-	Port     uint16 `json:"port"`
-	Path     string `json:"path"`
-	Ttl      uint32 `json:"Ttl"`
-	Priority uint16 `json:"priority"`
-	Weight   uint16 `json:"weight"`
+	Name     string            `json:"name"`
+	Server   string            `json:"server"`
+	Port     uint16            `json:"port"`
+	Ttl      uint32            `json:"Ttl"`
+	Priority uint16            `json:"priority"`
+	Weight   uint16            `json:"weight"`
+	Params   map[string]string `json:"params"`
 }
 
-func (ds *DnsService) fullName() string {
-	b := bytes.NewBufferString(ds.Name)
-	b.WriteRune('.')
-	b.WriteString(ds.Type)
-	return b.String()
+func dotCanon(s string) string {
+	if !strings.HasSuffix(s, ".") {
+		return s + "."
+	}
+	return s
 }
 
-func (d *Director) withDomain(p string) string {
-	return p + d.domain
-}
+func (d *Director) RegDnsSrv(srvtype string, srv *DnsService) error {
+	csrvtype := dotCanon(srvtype)
+	if !strings.HasSuffix(csrvtype, d.domain) {
+		logger.Error("service type '%s' does not end with '%s' domain", srvtype, d.domain)
+		return NewDirectorError(ErrDirWrongSrvType, "service type '%s' does not end with '%s' domain", srvtype, d.domain)
+	}
 
-func (d *Director) RegDnsSrv(srv *DnsService) error {
-	cName := d.withDomain(srv.fullName())
-	cType := d.withDomain(srv.Type)
-	rPtr, err := d.attachSrvToType(cType, cName)
+	csrvname := dotCanon(srv.Name)
+	if !strings.HasSuffix(csrvname, d.domain) {
+		logger.Error("service name '%s' does not end with '%s' domain", srv.Name, d.domain)
+		return NewDirectorError(ErrDirWrongSrvName, "service name '%s' does not end with '%s' domain", srv.Name, d.domain)
+	}
+
+	cserver := dotCanon(srv.Server)
+	if !strings.HasSuffix(cserver, d.domain) {
+		logger.Error("server '%s' does not end with '%s' domain", srv.Server, d.domain)
+		return NewDirectorError(ErrDirWrongServer, "server '%s' does not end with '%s' domain", srv.Server, d.domain)
+	}
+
+	rPtr, err := d.attachSrvToType(csrvtype, csrvname, srv.Ttl)
 	if err != nil {
 		logger.Error("Attach service to type failed: %s", err.Error())
 		return err
 	}
-	rSrv, err := d.assignSrvToServer(cName, d.withDomain(srv.Server), srv.Port, srv.Ttl, srv.Priority, srv.Weight)
+	rSrv, err := d.assignSrvToServer(csrvname, cserver, srv.Port, srv.Ttl, srv.Priority, srv.Weight)
 	if err != nil {
 		logger.Error("Assign service to server failed: %s", err.Error())
 		return err
 	}
-	rTxt, err := d.addServRules(cName, map[string]string{"path": srv.Path})
+
+	params := srv.Params
+	params["txtvers"] = "1"
+	rTxt, err := d.addServRules(csrvname, params)
 	if err != nil {
 		logger.Error("Add service rules failed: %s", err.Error())
 		return err
@@ -343,8 +357,8 @@ func (d *Director) RegDnsSrv(srv *DnsService) error {
 	return d.gate.Add(d.zone, []dns.RR{rPtr, rSrv, rTxt})
 }
 
-func (d *Director) FindDnsSrvNames(srvType string) ([]string, error) {
-	ptrs, err := d.findByType(d.withDomain(srvType))
+func (d *Director) FindDnsSrvNames(srvtype string) ([]string, error) {
+	ptrs, err := d.findByType(dotCanon(srvtype))
 	if err != nil {
 		logger.Error("Finding PTRs by type error: %s", err.Error())
 		return nil, err
@@ -355,4 +369,27 @@ func (d *Director) FindDnsSrvNames(srvType string) ([]string, error) {
 		names[i] = ptrs[i].Ptr
 	}
 	return names, nil
+}
+
+func (d *Director) FindDnsSrvInstances(srvname string) ([]*DnsService, error) {
+	rsrvs, params, err := d.findSrv(dotCanon(srvname))
+	if err != nil {
+		logger.Error("Finding services error: %s", err.Error())
+		return nil, err
+	}
+
+	var h *dns.RR_Header
+	srvs := make([]*DnsService, len(rsrvs), len(rsrvs))
+	for i := range rsrvs {
+		h = rsrvs[i].Header()
+		srvs[i] = &DnsService{Name: h.Name,
+			Server:   rsrvs[i].Target,
+			Port:     rsrvs[i].Port,
+			Ttl:      h.Ttl,
+			Priority: rsrvs[i].Priority,
+			Weight:   rsrvs[i].Weight,
+			Params:   params,
+		}
+	}
+	return srvs, nil
 }
