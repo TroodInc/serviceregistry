@@ -181,7 +181,19 @@ func (ds *DirectorServer) Run() {
 	}))
 
 	router.DELETE(ds.root+"/services/types/:type", CreateJsonAction(func(_ io.ReadCloser, sink *JsonSink, p httprouter.Params, q url.Values) {
-		sink.pushError(&ServerError{http.StatusNotImplemented, ErrInternalServerError, "Has not realized yet"})
+		name := q.Get("name")
+		if name == "" {
+			msg := "Required query parameter 'name' not found"
+			logger.Error(msg)
+			sink.pushError(&ServerError{http.StatusBadRequest, ErrBadRequest, msg})
+			return
+		}
+
+		if e := dr.RmDnsSrv(p.ByName("type"), name); e != nil {
+			sink.pushError(e)
+		} else {
+			sink.pushEmpty()
+		}
 	}))
 
 	router.DELETE(ds.root+"/services/instances/:name", CreateJsonAction(func(_ io.ReadCloser, sink *JsonSink, p httprouter.Params, q url.Values) {
