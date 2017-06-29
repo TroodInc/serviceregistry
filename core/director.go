@@ -388,6 +388,24 @@ func (d *Director) RmDnsSrv(srvtype, srvname string) error {
 	return d.gate.Remove(d.zone, csrvname, []dns.RR{ptr})
 }
 
+func (d *Director) RmInstance(srvname, server string, port uint16) error {
+	csrvname := dotCanon(srvname)
+	if !strings.HasSuffix(csrvname, d.domain) {
+		logger.Error("service name '%s' does not end with '%s' domain", srvname, d.domain)
+		return NewDirectorError(ErrDirWrongSrvName, "service name '%s' does not end with '%s' domain", srvname, d.domain)
+	}
+	
+	if e := validateSrvName(strings.TrimSuffix(srvname, d.domain)); e != nil {
+		return e
+	}
+
+	srv := new(dns.SRV)
+	srv.Hdr = dns.RR_Header{csrvname, dns.TypeSRV, dns.ClassINET, 0, 0}
+	srv.Target = server
+	srv.Port = port
+	return d.gate.Remove(d.zone, "", []dns.RR{srv})
+}
+
 func (d *Director) FindDnsSrvNames(srvtype string) ([]string, error) {
 	ptrs, err := d.findByType(dotCanon(srvtype))
 	if err != nil {
